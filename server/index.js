@@ -34,18 +34,21 @@ app.post('/api/ai', async (req, res) => {
       generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 4096 }
     });
 
-    // Retry temporary Gemini overload/rate-limit/server errors before returning a user-facing error.
+    // Keep the demo responsive: fail fast instead of leaving the user waiting indefinitely.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 9000);
     let response;
     let data = {};
-    for (let attempt = 0; attempt < 3; attempt++) {
+    try {
       response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: requestBody
+        body: requestBody,
+        signal: controller.signal
       });
       data = await response.json().catch(() => ({}));
-      if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt === 2) break;
-      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+    } finally {
+      clearTimeout(timeoutId);
     }
     if (!response.ok) {
       console.error('Gemini API error:', response.status, data?.error?.message || 'unknown');
