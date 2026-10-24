@@ -155,9 +155,31 @@ app.post('/api/image', async (req, res) => {
       clearTimeout(timeoutId);
     }
   }
-  // Last-resort free provider: anonymous legacy Pollinations endpoint. This is best-effort and may rate-limit.
+  // Translate Arabic into a faithful English image prompt; image models often follow English prompts more reliably.
+  let imageDescription = String(prompt).trim();
   try {
-    const fallbackPrompt = `Create one clear, high-quality image: ${prompt}. Style: ${style || 'cinematic photorealism'}. One main subject, uncluttered composition, distinct objects with visible space between them, accurate perspective, sharp focus, clear edges, realistic materials, balanced lighting and shadows. Avoid crowded or fused objects, duplicated structures, blurry details, visual noise, text, watermark, border, icon, logo, infographic, or geometric placeholder.`;
+    const translationModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+    const translationResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${translationModel}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: `Translate the user's image request into concise, precise English for an image-generation model. Preserve only the objects, scene, colors, lighting, and style explicitly requested. Do not invent people, characters, clothing, objects, or extra scenery. If no person is requested, explicitly say: no people. Return only the translated prompt. User request: ${prompt}` }] }],
+        generationConfig: { temperature: 0.1, maxOutputTokens: 300 }
+      }),
+      signal: AbortSignal.timeout(12000)
+    });
+    if (translationResponse.ok) {
+      const translationData = await translationResponse.json().catch(() => ({}));
+      const translated = (translationData?.candidates?.[0]?.content?.parts || []).map(part => part.text || '').join(' ').trim();
+      if (translated && translated.length > 5) imageDescription = translated;
+    }
+  } catch (translationError) {
+    console.warn('Image prompt translation unavailable; using original prompt.');
+  }
+
+  // Last-resort free provider: anonymous image service; may rate-limit or vary in quality.
+  try {
+    const fallbackPrompt = `Faithfully create exactly the scene described here, without adding unrelated subjects: ${imageDescription}. Style: ${style || 'cinematic photorealism'}. Composition: one coherent scene, clear main subject, uncluttered background, realistic architecture and perspective, distinct buildings with visible gaps, sharp focus, clean edges, natural shadows, balanced cinematic lighting. Do not add people, faces, human figures, long-haired characters, clothing, or unrelated objects unless explicitly requested. No fused structures, duplicated objects, overlapping subjects, collage, blur, visual noise, text, watermark, border, icon, logo, infographic, or geometric placeholder.`;
     const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fallbackPrompt)}?width=1024&height=1024&model=flux&enhance=true&nologo=true`;
     const fallbackController = new AbortController();
     const fallbackTimeout = setTimeout(() => fallbackController.abort(), 90000);
