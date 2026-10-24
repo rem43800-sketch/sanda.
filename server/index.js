@@ -166,7 +166,7 @@ app.get('/api/video/:videoId', async (req, res) => {
     if (!r.ok) return res.status(502).json({ error: 'تعذّر التحقق من حالة الفيديو.' });
     const status = String(d.status || 'pending').toLowerCase();
     if (status === 'failed' || status === 'error') return res.json({ status: 'failed', error: d.error || 'لم يكتمل إنشاء الفيديو.' });
-    const videoUrl = d.video_url || d.url || d.output?.video_url;
+    const videoUrl = d.video_url || d.url || d.output?.video_url || d.metadata?.url;
     if (['completed','complete','succeeded'].includes(status) && typeof videoUrl === 'string' && videoUrl.startsWith('https://')) return res.json({ status: 'completed', videoUrl });
     return res.json({ status: 'processing', progress: Number(d.progress) || 0 });
   } catch { return res.status(502).json({ error: 'انقطع الاتصال أثناء متابعة الفيديو.' }); }
