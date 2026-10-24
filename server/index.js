@@ -253,7 +253,7 @@ app.post('/api/video', async (req, res) => {
     createdAt: now,
     updatedAt: now
   });
-  res.json({ videoId, modelName: 'agnes-video-2.5-flash', status: 'pending' });
+  res.json({ videoId, modelName: 'agnes-video-2.5-flash', status: 'pending', message: 'أُضيف الطلب إلى قائمة الانتظار؛ سيعيد سَندَ المحاولة تلقائيًا إذا كان الطابور مزدحمًا.' });
   void runVideoJob(videoId).catch(err => {
     console.error('Unexpected video job failure:', err?.message || 'unknown');
     const job = videoJobs.get(videoId);
