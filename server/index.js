@@ -251,7 +251,7 @@ app.post('/api/image', async (req, res) => {
         const statusData = await statusResponse.json().catch(() => ({}));
         const generated = statusData?.generations?.[0]?.img;
         if (statusResponse.ok && generated) {
-          if (/^https?:\\/\\//i.test(generated)) {
+          if (String(generated).startsWith('https://') || String(generated).startsWith('http://')) {
             const imageResponse = await fetch(generated, { signal: AbortSignal.timeout(20000) });
             const imageType = imageResponse.headers.get('content-type') || 'image/webp';
             if (imageResponse.ok && imageType.startsWith('image/')) {
