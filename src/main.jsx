@@ -1,4 +1,6 @@
 import "../styles.css";
+import logoUrl from "../assets/logo.jpg";
+import videoUrl from "../assets/explainer.mp4";
 
 import React, {useState,useEffect,useRef} from "react";
 import { createRoot } from "react-dom/client";
@@ -6,8 +8,8 @@ import PptxGenJS from "pptxgenjs";
 import JSZip from "jszip";
 window.PptxGenJS = PptxGenJS;
 window.JSZip = JSZip;
-const LOGO="./assets/logo.jpg";
-const VID="./assets/explainer.mp4";
+const LOGO=logoUrl;
+const VID=videoUrl;
 const P={user:"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8",x:"M18 6 6 18M6 6l12 12",play:"M6 4l14 8-14 8z",pause:"M6 4h4v16H6zM14 4h4v16h-4z",clip:"M21 12.5 12.5 21a5.5 5.5 0 0 1-8-8L13 4.5a3.5 3.5 0 0 1 5 5L9.5 18a1.5 1.5 0 0 1-2-2L15 8.5",home:"M3 11l9-8 9 8M5 10v10h14V10",spark:"M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z",video:"M3 6h12v12H3zM15 10l6-3v10l-6-3",image:"M3 4h18v16H3zM3 16l5-5 5 5 3-3 5 5",bag:"M6 8h12l1 12H5zM9 8a3 3 0 0 1 6 0",chart:"M4 20V10M10 20V4M16 20v-8M22 20H2",mic:"M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3",slides:"M3 4h18v12H3zM8 20h8M12 16v4",dl:"M12 3v12M7 10l5 5 5-5M4 21h16",plus:"M12 5v14M5 12h14",file:"M6 3h9l4 4v14H6zM14 3v5h5",mind:"M12 4v6M12 14v6M4 12h6M14 12h6"};
 const Ic=({n,s=18})=><svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d={P[n]}/></svg>;
 const NAV=[["landing","الرئيسية","home"],["new","فكرة جديدة","spark"],["video","إنشاء مقطع فيديو","video"],["image","توليد صورة","image"],["store","متجر إلكتروني","bag"],["plan","أفكار أعمال","chart"],["pod","بودكاست","mic"],["pres","عرض تقديمي","slides"],["docs","مستندات وملفات","file"],["diag","جداول وخرائط ذهنية","mind"]];
