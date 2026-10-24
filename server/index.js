@@ -155,6 +155,34 @@ app.post('/api/image', async (req, res) => {
       clearTimeout(timeoutId);
     }
   }
+  // Last-resort free provider: anonymous legacy Pollinations endpoint. This is best-effort and may rate-limit.
+  try {
+    const fallbackPrompt = `${prompt}. Style: ${style || 'cinematic photorealistic concept art'}. Detailed, polished image; coherent perspective and lighting; no text, watermark, border, icon, logo, infographic, or geometric placeholder.`;
+    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fallbackPrompt)}?width=1024&height=1024&model=flux&nologo=true`;
+    const fallbackController = new AbortController();
+    const fallbackTimeout = setTimeout(() => fallbackController.abort(), 90000);
+    try {
+      const fallbackResponse = await fetch(fallbackUrl, { signal: fallbackController.signal, headers: { Accept: 'image/*' } });
+      const contentType = fallbackResponse.headers.get('content-type') || '';
+      if (fallbackResponse.ok && contentType.startsWith('image/')) {
+        const imageBuffer = Buffer.from(await fallbackResponse.arrayBuffer());
+        if (imageBuffer.length > 1000) {
+          return res.json({
+            title: String(prompt).trim().slice(0, 100) || 'الصورة الناتجة',
+            image: `data:${contentType};base64,${imageBuffer.toString('base64')}`,
+            mimeType: contentType,
+            provider: 'fallback'
+          });
+        }
+      }
+      lastMessage = `المزوّد المجاني أعاد HTTP ${fallbackResponse.status} أو لم يُرجع صورة صالحة.`;
+      console.warn('Anonymous image fallback unavailable:', lastMessage);
+    } finally {
+      clearTimeout(fallbackTimeout);
+    }
+  } catch (fallbackError) {
+    console.warn('Anonymous image fallback failed:', fallbackError?.message || 'unknown');
+  }
   return res.status(502).json({ error: 'تعذّر إنشاء صورة فعلية من مزوّد الصور حاليًا. ' + (lastMessage ? 'التفاصيل: ' + lastMessage : 'حاول لاحقًا.') });
 });
 
