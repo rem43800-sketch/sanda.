@@ -1,10 +1,12 @@
 import 'dotenv/config';
+import { randomUUID } from 'node:crypto';
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const app = express();
+const videoJobs = new Map();
 const PORT = Number(process.env.PORT || 8787);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 app.use(cors({ origin: process.env.CLIENT_ORIGIN || true }));
@@ -102,73 +104,189 @@ app.post('/api/ai', async (req, res) => {
 });
 
 
+const videoDelay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function runVideoJob(jobId) {
+  const job = videoJobs.get(jobId);
+  if (!job) return;
+  const deadline = Date.now() + 14 * 60 * 1000;
+  let externalVideoId = '';
+  let attempt = 0;
+
+  const fail = message => {
+    job.status = 'failed';
+    job.error = message;
+    job.message = message;
+    job.updatedAt = Date.now();
+  };
+
+  // Submit with a gentle backoff. Queue-full responses are retried in the background
+  // so the browser request itself does not time out while the provider is busy.
+  while (Date.now() < deadline && !externalVideoId) {
+    attempt += 1;
+    job.status = 'queued';
+    job.message = 'طابور المزوّد مزدحم؛ سَندَ سيعيد المحاولة تلقائيًا.';
+    job.updatedAt = Date.now();
+    let response;
+    let data = {};
+    try {
+      response = await fetch('https://apihub.agnes-ai.com/v1/videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.AGNES_API_KEY },
+        body: JSON.stringify({
+          model: 'agnes-video-2.5-flash',
+          prompt: job.prompt,
+          mode: 'text',
+          seconds: '5',
+          size: '720P',
+          aspect_ratio: '16:9',
+          n: 1
+        }),
+        signal: AbortSignal.timeout(30000)
+      });
+      data = await response.json().catch(() => ({}));
+    } catch (err) {
+      console.warn('Agnes video submission transport issue:', err?.message || 'unknown', 'attempt', attempt);
+      await videoDelay(Math.min(attempt * 30000, 90000));
+      continue;
+    }
+
+    if (response.ok) {
+      externalVideoId = String(data.video_id || data.id || data.task_id || '');
+      if (!externalVideoId) {
+        fail('مزوّد الفيديو لم يُرجع رقم المهمة.');
+        return;
+      }
+      job.providerVideoId = externalVideoId;
+      job.status = 'processing';
+      job.message = 'قبل المزوّد الطلب؛ جارٍ إنشاء الفيديو.';
+      job.updatedAt = Date.now();
+      break;
+    }
+
+    const providerMessage = String(data?.error?.message || data?.message || '').replace(/[\r\n]+/g, ' ').slice(0, 240);
+    const isQueueFull = /queue is full|video_queue_full|queue.{0,25}full/i.test(providerMessage);
+    console.warn('Agnes video submission failed:', response.status, providerMessage || 'no provider message', 'attempt', attempt);
+
+    if (response.status === 401 || response.status === 403) {
+      fail('مفتاح محرك الفيديو غير مقبول أو لا يملك صلاحية الوصول.');
+      return;
+    }
+    if (!isQueueFull && ![408, 429, 500, 502, 503, 504, 520, 522, 524].includes(response.status)) {
+      fail('تعذّر إرسال الفيديو إلى المزوّد (HTTP ' + response.status + '). ' + (providerMessage || 'حاولي لاحقًا.'));
+      return;
+    }
+    job.status = 'queued';
+    job.message = isQueueFull
+      ? 'الطابور المجاني ممتلئ حاليًا؛ سَندَ يحاول تلقائيًا كل فترة.'
+      : 'المزوّد مشغول مؤقتًا؛ سَندَ سيعيد المحاولة تلقائيًا.';
+    job.updatedAt = Date.now();
+    await videoDelay(Math.min(attempt * 30000, 90000));
+  }
+
+  if (!externalVideoId) {
+    fail('ظلّ طابور الفيديو مزدحمًا بعد انتظار وإعادة المحاولة تلقائيًا. لم تُنشأ مهمة فيديو؛ جرّبي لاحقًا.');
+    return;
+  }
+
+  // Poll the accepted task in the background, leaving the client free to poll our job status.
+  while (Date.now() < deadline) {
+    try {
+      const resultResponse = await fetch(
+        'https://apihub.agnes-ai.com/agnesapi?video_id=' + encodeURIComponent(externalVideoId) + '&model_name=agnes-video-2.5-flash',
+        { headers: { Authorization: 'Bearer ' + process.env.AGNES_API_KEY }, signal: AbortSignal.timeout(20000) }
+      );
+      const result = await resultResponse.json().catch(() => ({}));
+      if (resultResponse.status === 401 || resultResponse.status === 403) {
+        fail('مفتاح محرك الفيديو غير مقبول عند التحقق من النتيجة.');
+        return;
+      }
+      const status = String(result.status || 'pending').toLowerCase();
+      if (['failed', 'error', 'faulted'].includes(status)) {
+        fail(String(result.error || result.message || 'لم يكتمل إنشاء الفيديو لدى المزوّد.'));
+        return;
+      }
+      const videoUrl = result.video_url || result.url || result.output?.video_url || result.metadata?.url;
+      if (resultResponse.ok && ['completed', 'complete', 'succeeded', 'success'].includes(status) && typeof videoUrl === 'string' && videoUrl.startsWith('https://')) {
+        job.status = 'completed';
+        job.videoUrl = videoUrl;
+        job.progress = 100;
+        job.message = 'اكتمل الفيديو.';
+        job.updatedAt = Date.now();
+        return;
+      }
+      job.status = 'processing';
+      job.progress = Math.max(0, Math.min(99, Number(result.progress) || 0));
+      job.message = 'قبل المزوّد المهمة؛ جارٍ إنشاء الفيديو.';
+      job.updatedAt = Date.now();
+    } catch (err) {
+      console.warn('Agnes video status check failed:', err?.message || 'unknown');
+    }
+    await videoDelay(20000);
+  }
+
+  fail('ما زال الفيديو قيد المعالجة بعد 14 دقيقة. لم يبدأ سَندَ طلبًا آخر؛ جرّبي التحقق لاحقًا.');
+}
+
 app.post('/api/video', async (req, res) => {
   const prompt = req.body?.prompt;
   if (typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'اكتبي وصف الفيديو أولًا.' });
   if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: 'مفتاح محرك الفيديو غير مضاف إلى الخادم.' });
 
-  // Prefer Agnes Video 2.0: the provider's current catalog documents this model,
-  // and it may use a separate queue from the congested 2.5 Flash pool.
-  const modelName = 'agnes-video-2.5-flash';
-  const payload = { model: modelName, prompt: prompt.trim().slice(0, 3000), mode: 'text', seconds: '5', size: '720P', aspect_ratio: '16:9', n: 1 };
-  let lastStatus = 0;
-  let providerMessage = '';
-  try {
-    // Free video workers are often saturated. Retry temporary queue-full responses
-    // with backoff instead of failing immediately; no task is created by a rejected submission.
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      const r = await fetch('https://apihub.agnes-ai.com/v1/videos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AGNES_API_KEY}` },
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(30000)
-      });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok) {
-        const videoId = d.video_id || d.task_id || d.id;
-        if (!videoId) return res.status(502).json({ error: 'لم يرجع مزوّد الفيديو رقم المهمة.' });
-        return res.json({ videoId: String(videoId), modelName, status: 'pending' });
-      }
-      lastStatus = r.status;
-      providerMessage = String(d?.error?.message || d?.message || '').replace(/[\\r\\n]+/g, ' ').slice(0, 240);
-      const queueFull = r.status === 503 && /queue is full|video_queue_full|temporarily unavailable|service busy/i.test(providerMessage);
-      console.warn('Agnes video create failed:', r.status, providerMessage || 'no provider message', 'attempt', attempt);
-      if (queueFull && attempt < 5) {
-        await new Promise(resolve => setTimeout(resolve, 30000));
-        continue;
-      }
-      if ([500, 502, 503, 504].includes(r.status) && attempt < 3) {
-        await new Promise(resolve => setTimeout(resolve, 15000));
-        continue;
-      }
-      break;
-    }
-    if (lastStatus === 401 || lastStatus === 403) return res.status(502).json({ error: 'مفتاح محرك الفيديو غير مقبول أو لا يملك صلاحية الوصول.' });
-    if (lastStatus === 429) return res.status(502).json({ error: 'وصل حساب الفيديو إلى حد الطلبات مؤقتًا. انتظري قليلًا قبل المحاولة.' });
-    if (lastStatus === 503 && /queue is full|video_queue_full/i.test(providerMessage)) {
-      return res.status(502).json({ error: 'طابور الفيديو المجاني لدى المزوّد ما زال ممتلئًا بعد عدة محاولات تلقائية. لم يبدأ إنشاء الفيديو ولم يُخصم رصيد؛ جرّبي لاحقًا.' });
-    }
-    return res.status(502).json({ error: 'تعذّر إنشاء الفيديو من المزوّد (HTTP ' + lastStatus + '). ' + (providerMessage || 'حاولي لاحقًا.') });
-  } catch (err) {
-    console.error('Agnes video request failed:', err?.message || 'unknown');
-    return res.status(502).json({ error: 'انقطع الاتصال بمزوّد الفيديو أثناء الإرسال. جرّبي مرة أخرى بعد قليل.' });
+  // Keep this simple in-memory queue bounded on the free Render instance.
+  const now = Date.now();
+  for (const [id, oldJob] of videoJobs) {
+    if (['completed', 'failed'].includes(oldJob.status) && now - oldJob.updatedAt > 30 * 60 * 1000) videoJobs.delete(id);
   }
+  const activeJobs = [...videoJobs.values()].filter(job => ['queued', 'processing'].includes(job.status)).length;
+  if (activeJobs >= 2) {
+    return res.status(429).json({ error: 'يوجد طلب فيديو قيد الانتظار بالفعل. انتظري نتيجته قبل إرسال طلب آخر.' });
+  }
+
+  const videoId = randomUUID();
+  videoJobs.set(videoId, {
+    id: videoId,
+    prompt: prompt.trim().slice(0, 3000),
+    status: 'queued',
+    message: 'أُضيف الطلب إلى قائمة الانتظار؛ سَندَ سيعيد المحاولة تلقائيًا.',
+    progress: 0,
+    createdAt: now,
+    updatedAt: now
+  });
+  res.json({ videoId, modelName: 'agnes-video-2.5-flash', status: 'pending' });
+  void runVideoJob(videoId).catch(err => {
+    console.error('Unexpected video job failure:', err?.message || 'unknown');
+    const job = videoJobs.get(videoId);
+    if (job) {
+      job.status = 'failed';
+      job.error = 'حدث خطأ غير متوقع أثناء معالجة الفيديو.';
+      job.message = job.error;
+      job.updatedAt = Date.now();
+    }
+  });
 });
 
 app.get('/api/video/:videoId', async (req, res) => {
-  if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: 'مفتاح محرك الفيديو المجاني غير مضاف إلى الخادم.' });
   const id = String(req.params.videoId || '');
   if (!/^[a-zA-Z0-9_-]{1,200}$/.test(id)) return res.status(400).json({ error: 'رقم مهمة الفيديو غير صالح.' });
+
+  const localJob = videoJobs.get(id);
+  if (localJob) {
+    if (localJob.status === 'failed') return res.json({ status: 'failed', error: localJob.error || localJob.message });
+    if (localJob.status === 'completed') return res.json({ status: 'completed', videoUrl: localJob.videoUrl, progress: 100 });
+    return res.json({ status: 'processing', progress: localJob.progress || 0, message: localJob.message || 'جارٍ إنشاء الفيديو.' });
+  }
+
+  if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: 'مفتاح محرك الفيديو غير مضاف إلى الخادم.' });
   try {
-    const requestedModel = String(req.query.model || 'agnes-video-2.5-flash');
-    const modelName = requestedModel === 'agnes-video-2.5-flash' ? requestedModel : 'agnes-video-2.5-flash';
-    const r = await fetch('https://apihub.agnes-ai.com/agnesapi?video_id=' + encodeURIComponent(id) + '&model_name=' + encodeURIComponent(modelName), { headers: { Authorization: `Bearer ${process.env.AGNES_API_KEY}` }, signal: AbortSignal.timeout(20000) });
+    const modelName = 'agnes-video-2.5-flash';
+    const r = await fetch('https://apihub.agnes-ai.com/agnesapi?video_id=' + encodeURIComponent(id) + '&model_name=' + encodeURIComponent(modelName), { headers: { Authorization: 'Bearer ' + process.env.AGNES_API_KEY }, signal: AbortSignal.timeout(20000) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return res.status(502).json({ error: 'تعذّر التحقق من حالة الفيديو.' });
     const status = String(d.status || 'pending').toLowerCase();
     if (status === 'failed' || status === 'error') return res.json({ status: 'failed', error: d.error || 'لم يكتمل إنشاء الفيديو.' });
     const videoUrl = d.video_url || d.url || d.output?.video_url || d.metadata?.url;
-    if (['completed','complete','succeeded'].includes(status) && typeof videoUrl === 'string' && videoUrl.startsWith('https://')) return res.json({ status: 'completed', videoUrl });
+    if (['completed', 'complete', 'succeeded', 'success'].includes(status) && typeof videoUrl === 'string' && videoUrl.startsWith('https://')) return res.json({ status: 'completed', videoUrl });
     return res.json({ status: 'processing', progress: Number(d.progress) || 0 });
   } catch { return res.status(502).json({ error: 'انقطع الاتصال أثناء متابعة الفيديو.' }); }
 });
