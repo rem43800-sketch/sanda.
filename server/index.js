@@ -177,33 +177,105 @@ app.post('/api/image', async (req, res) => {
     console.warn('Image prompt translation unavailable; using original prompt.');
   }
 
-  // Last-resort free provider: anonymous image service; may rate-limit or vary in quality.
+  // First fallback: legacy Pollinations endpoint (may require a key or return 402).
   try {
     const fallbackPrompt = `Faithfully create exactly the scene described here, without adding unrelated subjects: ${imageDescription}. Style: ${style || 'cinematic photorealism'}. Composition: one coherent scene, clear main subject, uncluttered background, realistic architecture and perspective, distinct buildings with visible gaps, sharp focus, clean edges, natural shadows, balanced cinematic lighting. Do not add people, faces, human figures, long-haired characters, clothing, or unrelated objects unless explicitly requested. No fused structures, duplicated objects, overlapping subjects, collage, blur, visual noise, text, watermark, border, icon, logo, infographic, or geometric placeholder.`;
     const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fallbackPrompt)}?width=1024&height=1024&model=flux&enhance=true&nologo=true`;
     const fallbackController = new AbortController();
-    const fallbackTimeout = setTimeout(() => fallbackController.abort(), 90000);
+    const fallbackTimeout = setTimeout(() => fallbackController.abort(), 45000);
     try {
       const fallbackResponse = await fetch(fallbackUrl, { signal: fallbackController.signal, headers: { Accept: 'image/*' } });
       const contentType = fallbackResponse.headers.get('content-type') || '';
       if (fallbackResponse.ok && contentType.startsWith('image/')) {
         const imageBuffer = Buffer.from(await fallbackResponse.arrayBuffer());
         if (imageBuffer.length > 1000) {
-          return res.json({
-            title: String(prompt).trim().slice(0, 100) || 'الصورة الناتجة',
-            image: `data:${contentType};base64,${imageBuffer.toString('base64')}`,
-            mimeType: contentType,
-            provider: 'fallback'
-          });
+          return res.json({ title: String(prompt).trim().slice(0, 100) || 'الصورة الناتجة', image: `data:${contentType};base64,${imageBuffer.toString('base64')}`, mimeType: contentType, provider: 'fallback' });
         }
       }
-      lastMessage = `المزوّد المجاني أعاد HTTP ${fallbackResponse.status} أو لم يُرجع صورة صالحة.`;
-      console.warn('Anonymous image fallback unavailable:', lastMessage);
+      lastMessage = `Pollinations HTTP ${fallbackResponse.status}`;
+      console.warn('Pollinations image fallback unavailable:', lastMessage);
     } finally {
       clearTimeout(fallbackTimeout);
     }
   } catch (fallbackError) {
-    console.warn('Anonymous image fallback failed:', fallbackError?.message || 'unknown');
+    lastMessage = fallbackError?.message || 'Pollinations fallback failed';
+    console.warn('Pollinations image fallback failed:', lastMessage);
+  }
+
+  // Second fallback: AI Horde anonymous community workers. This can be slower and queue-dependent.
+  try {
+    const hordePrompt = `${imageDescription}. ${style || 'cinematic photorealism'}, high detail, coherent uncluttered composition, realistic perspective, crisp focus, clean separation between objects, no unrelated subjects, no people unless explicitly requested, no text, no watermark.### blurry, low quality, overlapping objects, fused buildings, duplicate subjects, extra people, extra characters, long-haired person, text, watermark, logo, collage, geometric placeholders`;
+    const hordeResponse = await fetch('https://aihorde.net/api/v2/generate/async', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', apikey: '0000000000', 'Client-Agent': 'SANDA:1.0:public-web-app' },
+      body: JSON.stringify({
+        prompt: hordePrompt,
+        params: { width: 512, height: 512, steps: 25, n: 1, cfg_scale: 7 },
+        nsfw: false,
+        censor_nsfw: true,
+        r2: true,
+        shared: true
+      }),
+      signal: AbortSignal.timeout(20000)
+    });
+    const hordeData = await hordeResponse.json().catch(() => ({}));
+    if (!hordeResponse.ok || !hordeData?.id) {
+      lastMessage = `AI Horde request failed (HTTP ${hordeResponse.status})`;
+      console.warn('AI Horde image fallback unavailable:', lastMessage);
+    } else {
+      const jobId = hordeData.id;
+      const deadline = Date.now() + 150000;
+      let completed = false;
+      while (Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 4000));
+        const checkResponse = await fetch(`https://aihorde.net/api/v2/generate/check/${encodeURIComponent(jobId)}`, {
+          headers: { apikey: '0000000000', 'Client-Agent': 'SANDA:1.0:public-web-app' },
+          signal: AbortSignal.timeout(12000)
+        });
+        const checkData = await checkResponse.json().catch(() => ({}));
+        if (!checkResponse.ok) {
+          lastMessage = `AI Horde status failed (HTTP ${checkResponse.status})`;
+          break;
+        }
+        if (checkData?.faulted) {
+          lastMessage = 'AI Horde worker could not generate the image.';
+          break;
+        }
+        if (checkData?.done) { completed = true; break; }
+      }
+      if (completed) {
+        const statusResponse = await fetch(`https://aihorde.net/api/v2/generate/status/${encodeURIComponent(jobId)}`, {
+          headers: { apikey: '0000000000', 'Client-Agent': 'SANDA:1.0:public-web-app' },
+          signal: AbortSignal.timeout(20000)
+        });
+        const statusData = await statusResponse.json().catch(() => ({}));
+        const generated = statusData?.generations?.[0]?.img;
+        if (statusResponse.ok && generated) {
+          if (/^https?:\\/\\//i.test(generated)) {
+            const imageResponse = await fetch(generated, { signal: AbortSignal.timeout(20000) });
+            const imageType = imageResponse.headers.get('content-type') || 'image/webp';
+            if (imageResponse.ok && imageType.startsWith('image/')) {
+              const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+              if (imageBuffer.length > 1000) {
+                return res.json({ title: String(prompt).trim().slice(0, 100) || 'الصورة الناتجة', image: `data:${imageType};base64,${imageBuffer.toString('base64')}`, mimeType: imageType, provider: 'ai-horde' });
+              }
+            }
+          } else {
+            const imageBase64 = String(generated).replace(/^data:image\\/[^;]+;base64,/, '');
+            if (imageBase64.length > 1000) {
+              return res.json({ title: String(prompt).trim().slice(0, 100) || 'الصورة الناتجة', image: `data:image/webp;base64,${imageBase64}`, mimeType: 'image/webp', provider: 'ai-horde' });
+            }
+          }
+        }
+        lastMessage = 'AI Horde finished without returning a valid image.';
+      } else if (!lastMessage) {
+        lastMessage = 'AI Horde queue took longer than 150 seconds.';
+      }
+      console.warn('AI Horde image generation did not complete:', lastMessage);
+    }
+  } catch (hordeError) {
+    lastMessage = hordeError?.message || 'AI Horde request failed';
+    console.warn('AI Horde image fallback failed:', lastMessage);
   }
   return res.status(502).json({ error: 'تعذّر إنشاء صورة فعلية من مزوّد الصور حاليًا. ' + (lastMessage ? 'التفاصيل: ' + lastMessage : 'حاول لاحقًا.') });
 });
