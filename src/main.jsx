@@ -130,15 +130,42 @@ function ImageT({idea}){const [p,setP]=useState(idea),[st,setSt]=useState("وا�
     {im.length>0&&<div className="grid grid-cols-1 gap-3 mt-4">{im.map((x,i)=><Box key={i}><img alt={x.t} src={x.image} className="w-full max-w-3xl mx-auto rounded-lg object-contain bg-white"/><b className="text-sm block mt-2">{x.t}</b><div className="flex gap-2 mt-2"><button className="gh text-xs" onClick={()=>job("جارٍ حفظ الصورة",async()=>{const r=await fetch(x.image);const blob=await r.blob();return saveFile("sanda-image.png",blob)})}>تنزيل الصورة PNG</button></div></Box>)}</div>}
     <Note>يستخدم سَندَ الآن نموذجًا مخصصًا لإنشاء صورة فعلية، بدل رسم أشكال SVG برمجية. تعتمد النتيجة على النموذج المتاح وحالة الخدمة.</Note></>}
 
-function VideoT({idea}){const [p,setP]=useState(idea),[sc,setSc]=useState(null),[url,setUrl]=useState(""),[blob,setBlob]=useState(null),[s,job]=useJob(),ref=useRef();
-  useEffect(()=>{if(sc&&ref.current)document.fonts.load("800 72px Cairo").then(()=>drawScene(ref.current.getContext("2d"),sc[0],1))},[sc]);
-  const go=()=>job("جارٍ كتابة المشاهد",async()=>{const r=await ask("اكتب سيناريو فيديو قصير من 5 مشاهد حول: «"+p+"». لكل مشهد عنوان (حتى 6 كلمات) ونص (حتى 14 كلمة) ولونان داكنان بصيغة hex.",'{"scenes":[{"title":"","text":"","c1":"#342078","c2":"#6D4AE6"}]}');const a=(r.scenes||[]).slice(0,6).map(x=>({title:String(x.title||""),text:String(x.text||""),c1:hx(x.c1,"#342078"),c2:hx(x.c2,"#6D4AE6")}));if(!a.length)throw new Error("لم تصل مشاهد صالحة.");setSc(a);setUrl("");setBlob(null);return "جاهز: "+a.length+" مشاهد"});
-  const play=()=>new Promise(res=>{const cx=ref.current.getContext("2d"),T=sc.length*SEC,t0=performance.now(),f=now=>{const t=(now-t0)/1000;if(t>=T){drawScene(cx,sc[sc.length-1],SEC);res();return}const i=Math.floor(t/SEC);drawScene(cx,sc[i],t-i*SEC);requestAnimationFrame(f)};requestAnimationFrame(f)});
-  const rec=()=>job("جارٍ تسجيل الفيديو بزمن حقيقي ("+sc.length*SEC+" ثانية)، لا تغادر الصفحة",async()=>{if(!window.MediaRecorder)throw new Error("متصفحك لا يدعم تسجيل الفيديو.");const mt=["video/webm;codecs=vp9","video/webm"].find(m=>MediaRecorder.isTypeSupported(m));if(!mt)throw new Error("صيغة WebM غير مدعومة في متصفحك.");await document.fonts.load("800 72px Cairo");const mr=new MediaRecorder(ref.current.captureStream(30),{mimeType:mt,videoBitsPerSecond:4000000}),ch=[],done=new Promise(r=>{mr.onstop=r});mr.ondataavailable=e=>{if(e.data.size)ch.push(e.data)};mr.start();await play();mr.stop();await done;const b=new Blob(ch,{type:"video/webm"});if(!b.size)throw new Error("فشل التسجيل: الملف فارغ.");setBlob(b);setUrl(URL.createObjectURL(b));return "اكتمل التسجيل ("+Math.round(b.size/1024)+" ك.ب)"});
-  return <><Bar v={p} set={setP} ph="صف فكرة الفيديو" go={go} label="اكتب المشاهد" s={s}/>
-    {sc&&<Box cls="mt-4"><canvas ref={ref} width="1280" height="720" className="w-full rounded-xl bg-black"/><div className="flex flex-wrap gap-2 mt-3"><button className="gh" disabled={!!s.busy} onClick={()=>job("جارٍ العرض",async()=>{await document.fonts.load("800 72px Cairo");await play()})}>معاينة</button><button className="btn" disabled={!!s.busy} onClick={rec}>سجّل الفيديو</button></div>
-      {url&&<><video src={url} controls className="w-full rounded-xl mt-3 bg-black"/><button className="btn mt-2" onClick={()=>job("جارٍ الحفظ",()=>saveFile("sand-video.webm",blob))}>تنزيل الفيديو (WebM)</button></>}</Box>}
-    <Note>الفيديو يُرسم من مشاهد كتبها Claude (نصوص وحركة وألوان) ثم يُسجَّل في متصفحك. هو ليس فيديو توليدياً سينمائياً، ولا يتضمن صوتاً.</Note></>}
+function VideoT({idea}){
+  const [p,setP]=useState(idea),[videoUrl,setVideoUrl]=useState(""),[statusText,setStatusText]=useState(""),[s,job]=useJob();
+  const go=()=>job("جارٍ إرسال الوصف إلى مولّد الفيديو الحقيقي",async()=>{
+    setVideoUrl("");setStatusText("نجهّز طلب الفيديو…");
+    const response=await fetch("/api/video",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:p.trim()})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data.error||"تعذّر بدء إنشاء الفيديو.");
+    if(!data.videoId)throw new Error("لم يرجع مزوّد الفيديو رقم المهمة.");
+    setStatusText("تم إرسال الطلب. قد يستغرق إنشاء الفيديو عدة دقائق؛ اتركي الصفحة مفتوحة.");
+    const deadline=Date.now()+15*60*1000;
+    while(Date.now()<deadline){
+      await new Promise(resolve=>setTimeout(resolve,25000));
+      const check=await fetch("/api/video/"+encodeURIComponent(data.videoId));
+      const state=await check.json().catch(()=>({}));
+      if(!check.ok)throw new Error(state.error||"تعذّر التحقق من حالة الفيديو.");
+      if(state.status==="completed"&&state.videoUrl){
+        setVideoUrl(state.videoUrl);setStatusText("اكتمل الفيديو، ويمكنك معاينته أو فتحه للتنزيل.");
+        return "اكتمل إنشاء الفيديو بالذكاء الاصطناعي.";
+      }
+      if(state.status==="failed")throw new Error(state.error||"لم يكتمل إنشاء الفيديو. جرّبي وصفًا آخر.");
+      setStatusText(state.progress>0?"جارٍ إنشاء الفيديو ("+state.progress+"%)… قد يستغرق عدة دقائق.":"جارٍ إنشاء الفيديو… قد يستغرق عدة دقائق.");
+    }
+    throw new Error("ما زال الفيديو قيد المعالجة بعد 15 دقيقة. لم نبدأ طلبًا جديدًا؛ جرّبي التحقق لاحقًا.");
+  });
+  return <><Bar v={p} set={setP} ph="اكتبي وصف الفيديو: المشهد، الحركة، الإضاءة، وزاوية الكاميرا" go={go} label="أنشئ فيديو حقيقي" s={s}/>
+    <Box cls="mt-4">
+      <div className="rounded-xl p-4 text-sm leading-7" style={{background:"rgba(109,74,230,.10)"}}>
+        <b>مولّد فيديو بالذكاء الاصطناعي</b>
+        <p className="mut mt-1">يحوّل وصفك إلى مقطع فيديو فعلي، وليس صورة ثابتة أو شرائح متحركة. مدة الانتظار تعتمد على ضغط المزوّد.</p>
+      </div>
+      {statusText&&<p className="text-sm mt-3" role="status">{statusText}</p>}
+      {videoUrl&&<><video src={videoUrl} controls playsInline className="w-full rounded-xl mt-3 bg-black"/><div className="flex gap-2 mt-3"><a className="btn" href={videoUrl} target="_blank" rel="noreferrer">فتح الفيديو وتنزيله</a><button className="gh" onClick={()=>{setVideoUrl("");setStatusText("")}}>إنشاء فيديو آخر</button></div></>}
+    </Box>
+    <Note>يستخدم هذا القسم مزوّد فيديو منفصلًا عن توليد الصور، حتى يبقى مسار الصور كما هو. يحتاج ربط مفتاح API مجاني في إعدادات الخادم قبل أن يعمل التوليد الحقيقي.</Note>
+  </>;
+}
 
 function AudioT({idea}){const [p,setP]=useState(idea),[txt,setT]=useState(""),[vs,setVs]=useState([]),[vi,setVi]=useState(0),[pl,setPl]=useState(false),[s,job]=useJob(),ok=!!window.speechSynthesis;
   useEffect(()=>{if(!ok)return;const f=()=>setVs(speechSynthesis.getVoices().filter(v=>/^ar/i.test(v.lang)));f();speechSynthesis.onvoiceschanged=f;return()=>speechSynthesis.cancel()},[]);
