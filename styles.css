@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap");
+
+:root{--bg:#F5F2FC;--surf:#fff;--ink:#1F1844;--mut:#6B6490;--line:#E4DFF4;--ind:#342078;--vio:#6D4AE6;--cy:#28B6D0;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-x]){--land:#181523}}
+html,body{height:100%}body{margin:0;font-family:'Cairo','Tajawal',system-ui,sans-serif;color:var(--ink);background:#FAF9FD}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:16px}
+.btn{background:linear-gradient(90deg,var(--ind),var(--vio));color:#fff;font-weight:600;border-radius:12px;padding:.6rem 1.2rem;display:inline-flex;align-items:center;gap:.5rem}
+.btn:disabled{opacity:.6}.gh{border:1px solid var(--line);border-radius:12px;padding:.5rem .9rem;font-weight:500;background:var(--surf)}
+.fld{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:.65rem .85rem;color:var(--ink);font-family:inherit;user-select:auto;-webkit-user-select:auto}
+.mut{color:var(--mut)}button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--cy);outline-offset:2px}
+@keyframes wv{0%,100%{transform:scaleY(.4)}50%{transform:scaleY(1)}}@keyframes sp{to{transform:rotate(360deg)}}.sp{animation:sp 1.6s linear infinite}
+@media (prefers-reduced-motion:reduce){.sp{animation:none}}
