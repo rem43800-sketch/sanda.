@@ -26,19 +26,27 @@ app.post('/api/ai', async (req, res) => {
 
   try {
     const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: `أنت مساعد منصة سَندَ العربية. أجب باللغة التي يطلبها المستخدم، والعربية افتراضيًا. أعد JSON صالحًا فقط دون Markdown. البنية المطلوبة: ${schema || 'JSON مناسب للمهمة'}` }]
-        },
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 4096 }
-      })
+    const requestBody = JSON.stringify({
+      systemInstruction: {
+        parts: [{ text: `أنت مساعد منصة سَندَ العربية. أجب باللغة التي يطلبها المستخدم، والعربية افتراضيًا. أعد JSON صالحًا فقط دون Markdown. البنية المطلوبة: ${schema || 'JSON مناسب للمهمة'}` }]
+      },
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 4096 }
     });
 
-    const data = await response.json().catch(() => ({}));
+    // Retry temporary Gemini overload/rate-limit/server errors before returning a user-facing error.
+    let response;
+    let data = {};
+    for (let attempt = 0; attempt < 3; attempt++) {
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: requestBody
+      });
+      data = await response.json().catch(() => ({}));
+      if (response.ok || ![429, 500, 502, 503, 504].includes(response.status) || attempt === 2) break;
+      await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+    }
     if (!response.ok) {
       console.error('Gemini API error:', response.status, data?.error?.message || 'unknown');
       return res.status(502).json({ error: 'نواجه مشكلة مؤقتة في إنشاء النتيجة. يرجى المحاولة لاحقًا.' });
