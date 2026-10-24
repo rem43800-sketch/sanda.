@@ -102,6 +102,36 @@ app.post('/api/ai', async (req, res) => {
 });
 
 
+app.post('/api/video', async (req, res) => {
+  const prompt = req.body?.prompt;
+  if (typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'اكتبي وصف الفيديو أولًا.' });
+  if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: 'مفتاح محرك الفيديو المجاني غير مضاف إلى الخادم بعد. لم يتم تفعيل أي خدمة مدفوعة.' });
+  try {
+    const r = await fetch('https://apihub.agnes-ai.com/v1/videos', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AGNES_API_KEY}` }, body: JSON.stringify({ model: 'agnes-video-v2.0', prompt: prompt.trim().slice(0, 3000), width: 1152, height: 648, num_frames: 121, frame_rate: 24 }), signal: AbortSignal.timeout(30000) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ error: r.status === 401 || r.status === 403 ? 'مفتاح محرك الفيديو غير مقبول.' : 'تعذّر بدء إنشاء الفيديو حاليًا.' });
+    const videoId = d.video_id || d.task_id || d.id;
+    if (!videoId) return res.status(502).json({ error: 'لم يرجع المزوّد رقم مهمة الفيديو.' });
+    return res.json({ videoId: String(videoId), status: 'pending' });
+  } catch { return res.status(502).json({ error: 'تعذّر الاتصال بمزوّد الفيديو.' }); }
+});
+
+app.get('/api/video/:videoId', async (req, res) => {
+  if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: 'مفتاح محرك الفيديو المجاني غير مضاف إلى الخادم.' });
+  const id = String(req.params.videoId || '');
+  if (!/^[a-zA-Z0-9_-]{1,200}$/.test(id)) return res.status(400).json({ error: 'رقم مهمة الفيديو غير صالح.' });
+  try {
+    const r = await fetch('https://apihub.agnes-ai.com/agnesapi?video_id=' + encodeURIComponent(id), { headers: { Authorization: `Bearer ${process.env.AGNES_API_KEY}` }, signal: AbortSignal.timeout(20000) });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return res.status(502).json({ error: 'تعذّر التحقق من حالة الفيديو.' });
+    const status = String(d.status || 'pending').toLowerCase();
+    if (status === 'failed' || status === 'error') return res.json({ status: 'failed', error: d.error || 'لم يكتمل إنشاء الفيديو.' });
+    const videoUrl = d.video_url || d.url || d.output?.video_url;
+    if (['completed','complete','succeeded'].includes(status) && typeof videoUrl === 'string' && videoUrl.startsWith('https://')) return res.json({ status: 'completed', videoUrl });
+    return res.json({ status: 'processing', progress: Number(d.progress) || 0 });
+  } catch { return res.status(502).json({ error: 'انقطع الاتصال أثناء متابعة الفيديو.' }); }
+});
+
 app.post('/api/image', async (req, res) => {
   const { prompt, style } = req.body || {};
   if (!prompt || typeof prompt !== 'string') {
