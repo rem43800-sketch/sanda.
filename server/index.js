@@ -178,14 +178,14 @@ app.post('/api/image', async (req, res) => {
   }
 
   // If Gemini translation is quota-blocked, translate Arabic to English before sending it to image providers.
-  if (/[\\u0600-\\u06FF]/.test(imageDescription)) {
+  if (/[\u0600-\u06FF]/.test(imageDescription)) {
     try {
       const translateUrl = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=en&dt=t&q=' + encodeURIComponent(imageDescription);
       const translateResponse = await fetch(translateUrl, { signal: AbortSignal.timeout(10000) });
       if (translateResponse.ok) {
         const translateData = await translateResponse.json();
         const translatedText = Array.isArray(translateData?.[0]) ? translateData[0].map(segment => Array.isArray(segment) ? segment[0] || '' : '').join('').trim() : '';
-        if (translatedText.length > 5 && !/[\\u0600-\\u06FF]/.test(translatedText)) {
+        if (translatedText.length > 5 && !/[\u0600-\u06FF]/.test(translatedText)) {
           imageDescription = translatedText;
           console.log('Arabic image prompt translated to English using fallback translator.');
         }
