@@ -204,14 +204,14 @@ app.post('/api/image', async (req, res) => {
     try {
       const fallbackResponse = await fetch(fallbackUrl, { signal: fallbackController.signal, headers: { Accept: 'image/*' } });
       const contentType = fallbackResponse.headers.get('content-type') || '';
+      // Do not return Pollinations images directly: this provider has produced unrelated results
+      // in real user tests. Continue to the AI Horde provider, or return a clear error below.
       if (fallbackResponse.ok && contentType.startsWith('image/')) {
-        const imageBuffer = Buffer.from(await fallbackResponse.arrayBuffer());
-        if (imageBuffer.length > 1000) {
-          return res.json({ title: String(prompt).trim().slice(0, 100) || 'الصورة الناتجة', image: `data:${contentType};base64,${imageBuffer.toString('base64')}`, mimeType: contentType, provider: 'fallback' });
-        }
+        console.warn('Pollinations returned an image but it is skipped because relevance is unreliable.');
+      } else {
+        lastMessage = `Pollinations HTTP ${fallbackResponse.status}`;
+        console.warn('Pollinations image fallback unavailable:', lastMessage);
       }
-      lastMessage = `Pollinations HTTP ${fallbackResponse.status}`;
-      console.warn('Pollinations image fallback unavailable:', lastMessage);
     } finally {
       clearTimeout(fallbackTimeout);
     }
