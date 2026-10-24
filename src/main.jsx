@@ -131,12 +131,18 @@ function ImageT({idea}){const [p,setP]=useState(idea),[st,setSt]=useState("وا�
     <Note>يستخدم سَندَ الآن نموذجًا مخصصًا لإنشاء صورة فعلية، بدل رسم أشكال SVG برمجية. تعتمد النتيجة على النموذج المتاح وحالة الخدمة.</Note></>}
 
 function VideoT({idea}){
-  const [p,setP]=useState(idea),[videoUrl,setVideoUrl]=useState(""),[statusText,setStatusText]=useState(""),[s,job]=useJob();
+  const [p,setP]=useState(idea),[videoUrl,setVideoUrl]=useState(""),[statusText,setStatusText]=useState(""),[s,job]=useJob(),[canFallback,setCanFallback]=useState(false),[isFallback,setIsFallback]=useState(false);
   const go=()=>job("جارٍ إرسال الوصف إلى مولّد الفيديو الحقيقي",async()=>{
+    setCanFallback(false);setIsFallback(false);
+    if(videoUrl.startsWith("blob:"))URL.revokeObjectURL(videoUrl);
     setVideoUrl("");setStatusText("نجهّز طلب الفيديو…");
     const response=await fetch("/api/video",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:p.trim()})});
     const data=await response.json().catch(()=>({}));
-    if(!response.ok)throw new Error(data.error||"تعذّر بدء إنشاء الفيديو.");
+    if(!response.ok){
+      const message=data.error||"تعذّر بدء إنشاء الفيديو.";
+      if(/queue|طابور|مزدحم|busy|overload/i.test(message))setCanFallback(true);
+      throw new Error(message);
+    }
     if(!data.videoId)throw new Error("لم يرجع مزوّد الفيديو رقم المهمة.");
     setStatusText("تم إرسال الطلب. قد يستغرق إنشاء الفيديو عدة دقائق؛ اتركي الصفحة مفتوحة.");
     const deadline=Date.now()+15*60*1000;
@@ -146,27 +152,94 @@ function VideoT({idea}){
       const state=await check.json().catch(()=>({}));
       if(!check.ok)throw new Error(state.error||"تعذّر التحقق من حالة الفيديو.");
       if(state.status==="completed"&&state.videoUrl){
-        setVideoUrl(state.videoUrl);setStatusText("اكتمل الفيديو، ويمكنك معاينته أو فتحه للتنزيل.");
+        setVideoUrl(state.videoUrl);setIsFallback(false);setStatusText("اكتمل الفيديو الحقيقي، ويمكنك معاينته أو فتحه للتنزيل.");
         return "اكتمل إنشاء الفيديو بالذكاء الاصطناعي.";
       }
-      if(state.status==="failed")throw new Error(state.error||"لم يكتمل إنشاء الفيديو. جرّبي وصفًا آخر.");
+      if(state.status==="failed"){
+        const message=state.error||"لم يكتمل إنشاء الفيديو. جرّبي وصفًا آخر.";
+        if(/queue|طابور|مزدحم|busy|overload/i.test(message))setCanFallback(true);
+        throw new Error(message);
+      }
       setStatusText(state.message || (state.progress>0?"جارٍ إنشاء الفيديو ("+state.progress+"%)… قد يستغرق عدة دقائق.":"جارٍ إنشاء الفيديو… قد يستغرق عدة دقائق."));
     }
-    throw new Error("ما زال الفيديو قيد المعالجة بعد 15 دقيقة. لم نبدأ طلبًا جديدًا؛ جرّبي التحقق لاحقًا.");
+    setCanFallback(true);
+    throw new Error("ما زال الفيديو الحقيقي قيد الانتظار بعد 15 دقيقة. يمكنك تجربة البديل المتحرك المجاني أدناه.");
   });
+
+  const makeAnimatedFallback=()=>job("جارٍ إنشاء بديل متحرك مجاني",async()=>{
+    if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream)throw new Error("متصفحك لا يدعم حفظ الحركة كفيديو. جرّبي أحدث نسخة من Chrome أو Edge.");
+    setStatusText("ننشئ صورة للمشهد باستخدام مولّد الصور…");
+    const response=await fetch("/api/image",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:p.trim(),style:"واقعي سينمائي"})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok||!data.image)throw new Error(data.error||"تعذّر إنشاء صورة للمشهد. جرّبي مرة أخرى لاحقًا.");
+    const image=new Image();
+    image.src=data.image;
+    await new Promise((resolve,reject)=>{image.onload=resolve;image.onerror=()=>reject(new Error("تعذّر تحميل الصورة الناتجة."));});
+    const canvas=document.createElement("canvas");
+    canvas.width=1280;canvas.height=720;
+    const ctx=canvas.getContext("2d");
+    if(!ctx)throw new Error("تعذّر تجهيز لوحة الفيديو.");
+    const stream=canvas.captureStream(24);
+    const mimeTypes=["video/webm;codecs=vp9","video/webm;codecs=vp8","video/webm"];
+    const mimeType=mimeTypes.find(type=>window.MediaRecorder.isTypeSupported&&window.MediaRecorder.isTypeSupported(type));
+    const recorder=mimeType?new MediaRecorder(stream,{mimeType}):new MediaRecorder(stream);
+    const chunks=[];
+    const recorded=new Promise((resolve,reject)=>{
+      recorder.ondataavailable=event=>{if(event.data&&event.data.size)chunks.push(event.data);};
+      recorder.onerror=()=>reject(new Error("حدث خطأ أثناء حفظ الفيديو المتحرك."));
+      recorder.onstop=()=>resolve(new Blob(chunks,{type:recorder.mimeType||"video/webm"}));
+    });
+    setStatusText("نحرّك المشهد بحركة كاميرا بطيئة ونحفظ مقطعًا مدته 5 ثوانٍ…");
+    recorder.start(250);
+    await new Promise(resolve=>{
+      const start=performance.now();
+      const draw=now=>{
+        const t=Math.max(0,Math.min(1,(now-start)/5000));
+        const base=Math.max(canvas.width/image.width,canvas.height/image.height);
+        const scale=base*(1+0.11*t);
+        const w=image.width*scale,h=image.height*scale;
+        const drift=Math.sin(t*Math.PI/2)*18;
+        ctx.fillStyle="#101020";ctx.fillRect(0,0,canvas.width,canvas.height);
+        ctx.drawImage(image,(canvas.width-w)/2-drift,(canvas.height-h)/2,w,h);
+        const tint=ctx.createLinearGradient(0,0,canvas.width,canvas.height);
+        tint.addColorStop(0,"rgba(52,32,120,0.17)");
+        tint.addColorStop(1,"rgba(20,96,140,0.13)");
+        ctx.fillStyle=tint;ctx.fillRect(0,0,canvas.width,canvas.height);
+        const vignette=ctx.createRadialGradient(canvas.width/2,canvas.height/2,canvas.height*.12,canvas.width/2,canvas.height/2,canvas.width*.7);
+        vignette.addColorStop(0,"rgba(0,0,0,0)");vignette.addColorStop(1,"rgba(5,3,18,0.24)");
+        ctx.fillStyle=vignette;ctx.fillRect(0,0,canvas.width,canvas.height);
+        if(t<1)requestAnimationFrame(draw);else resolve();
+      };
+      requestAnimationFrame(draw);
+    });
+    recorder.stop();
+    const blob=await recorded;
+    stream.getTracks().forEach(track=>track.stop());
+    if(blob.size<1000)throw new Error("لم يُنتج المتصفح ملف فيديو صالحًا. جرّبي مرة أخرى.");
+    if(videoUrl.startsWith("blob:"))URL.revokeObjectURL(videoUrl);
+    setVideoUrl(URL.createObjectURL(blob));
+    setIsFallback(true);setCanFallback(false);
+    setStatusText("تم إنشاء بديل متحرك من صورة مولّدة. تنبيه: هذا ليس فيديو ذكاء اصطناعي يولّد الحركة إطارًا بإطار.");
+    return "تم إنشاء البديل المتحرك المجاني.";
+  });
+
   return <><Bar v={p} set={setP} ph="اكتبي وصف الفيديو: المشهد، الحركة، الإضاءة، وزاوية الكاميرا" go={go} label="أنشئ فيديو حقيقي" s={s}/>
     <Box cls="mt-4">
       <div className="rounded-xl p-4 text-sm leading-7" style={{background:"rgba(109,74,230,.10)"}}>
         <b>مولّد فيديو بالذكاء الاصطناعي</b>
-        <p className="mut mt-1">يحوّل وصفك إلى مقطع فيديو فعلي، وليس صورة ثابتة أو شرائح متحركة. مدة الانتظار تعتمد على ضغط المزوّد.</p>
+        <p className="mut mt-1">يحاول سَندَ إنشاء فيديو حقيقي أولًا. يعتمد وقت الانتظار على ضغط المزوّد.</p>
       </div>
       {statusText&&<p className="text-sm mt-3" role="status">{statusText}</p>}
-      {videoUrl&&<><video src={videoUrl} controls playsInline className="w-full rounded-xl mt-3 bg-black"/><div className="flex gap-2 mt-3"><a className="btn" href={videoUrl} target="_blank" rel="noreferrer">فتح الفيديو وتنزيله</a><button className="gh" onClick={()=>{setVideoUrl("");setStatusText("")}}>إنشاء فيديو آخر</button></div></>}
+      {canFallback&&<div className="rounded-xl p-4 mt-3 border border-violet-300/40" style={{background:"rgba(109,74,230,.08)"}}>
+        <b className="text-sm">بديل مجاني متاح</b>
+        <p className="mut text-sm mt-1 leading-6">بما أن طابور الفيديو الحقيقي مزدحم، يمكنك توليد صورة للمشهد وتحويلها إلى مقطع 5 ثوانٍ بحركة كاميرا بطيئة. هذا البديل يحرّك صورة واحدة ولا يعادل فيديو مولّدًا مشهدًا بمشهد.</p>
+        <button className="btn mt-3" disabled={!!s.busy} onClick={makeAnimatedFallback}>إنشاء بديل متحرك مجاني</button>
+      </div>}
+      {videoUrl&&<><video src={videoUrl} controls playsInline className="w-full rounded-xl mt-3 bg-black"/><div className="flex flex-wrap gap-2 mt-3"><a className="btn" href={videoUrl} download={isFallback?"sanda-animated-fallback.webm":undefined} target={isFallback?undefined:"_blank"} rel="noreferrer">{isFallback?"تنزيل الفيديو المتحرك":"فتح الفيديو وتنزيله"}</a><button className="gh" onClick={()=>{if(videoUrl.startsWith("blob:"))URL.revokeObjectURL(videoUrl);setVideoUrl("");setStatusText("");setCanFallback(false);setIsFallback(false)}}>إنشاء فيديو آخر</button></div>{isFallback&&<p className="mut text-xs mt-2">صيغة الملف: WebM · المدة: 5 ثوانٍ · فيديو متحرك من صورة واحدة.</p>}</>}
     </Box>
-    <Note>يستخدم هذا القسم مزوّد فيديو منفصلًا عن توليد الصور، حتى يبقى مسار الصور كما هو. يحتاج ربط مفتاح API مجاني في إعدادات الخادم قبل أن يعمل التوليد الحقيقي.</Note>
+    <Note>إنشاء الفيديو الحقيقي منفصل عن توليد الصور. إذا تعذّر على المزوّد المجاني قبول الطلب، يظهر خيار بديل مجاني من صورة مولّدة مع توضيح الفرق.</Note>
   </>;
 }
-
 function AudioT({idea}){const [p,setP]=useState(idea),[txt,setT]=useState(""),[vs,setVs]=useState([]),[vi,setVi]=useState(0),[pl,setPl]=useState(false),[s,job]=useJob(),ok=!!window.speechSynthesis;
   useEffect(()=>{if(!ok)return;const f=()=>setVs(speechSynthesis.getVoices().filter(v=>/^ar/i.test(v.lang)));f();speechSynthesis.onvoiceschanged=f;return()=>speechSynthesis.cancel()},[]);
   const gen=()=>job("جارٍ كتابة النص",async()=>{const r=await ask("اكتب نص بودكاست عربي قصير (نحو 150 كلمة) بصوت مقدّم واحد حول: «"+p+"». نص متصل بلا رموز ولا قوائم.",'{"title":"","text":""}');setT((r.title?r.title+". ":"")+r.text);return "تمت كتابة النص"});
