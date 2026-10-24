@@ -21,11 +21,11 @@ app.post('/api/ai', async (req, res) => {
   }
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    return res.status(503).json({ error: 'خدمة الذكاء الاصطناعي غير مفعّلة. أضف GEMINI_API_KEY إلى إعدادات الخادم فقط.' });
+    return res.status(503).json({ error: 'نواجه مشكلة مؤقتة في إنشاء النتيجة. يرجى المحاولة لاحقًا.' });
   }
 
   try {
-    const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+    const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -41,25 +41,23 @@ app.post('/api/ai', async (req, res) => {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       console.error('Gemini API error:', response.status, data?.error?.message || 'unknown');
-      const status = response.status === 400 || response.status === 401 || response.status === 403 ? 502 : 502;
-      return res.status(status).json({ error: 'تعذّر على Gemini تنفيذ الطلب. تحقّق من صلاحية المفتاح وتفعيل الخدمة وحدود الاستخدام.' });
+      return res.status(502).json({ error: 'نواجه مشكلة مؤقتة في إنشاء النتيجة. يرجى المحاولة لاحقًا.' });
     }
 
     const raw = (data?.candidates?.[0]?.content?.parts || [])
       .map(part => part.text || '')
-      .join('\n').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      .join('\n').trim().replace(/^\`\`\`(?:json)?\s*/i, '').replace(/\s*\`\`\`$/, '');
     try {
       return res.json({ result: JSON.parse(raw) });
     } catch {
-      return res.status(502).json({ error: 'وصل رد من Gemini لكن تعذّر قراءته كـ JSON. جرّب وصفًا أوضح.' });
+      return res.status(502).json({ error: 'لم نتمكن من تجهيز النتيجة هذه المرة. جرّب مرة أخرى.' });
     }
   } catch (err) {
     console.error('Gemini request failed:', err?.message || 'unknown');
-    return res.status(502).json({ error: 'تعذّر الاتصال بخدمة الذكاء الاصطناعي. تحقّق من إعدادات الخادم ثم أعد المحاولة.' });
+    return res.status(502).json({ error: 'نواجه مشكلة مؤقتة في إنشاء النتيجة. يرجى المحاولة لاحقًا.' });
   }
 });
 
-// Serve the built frontend in production. During development Vite serves the client.
 const dist = path.resolve(__dirname, '../dist');
 app.use(express.static(dist));
 app.get('*', (req, res, next) => {
