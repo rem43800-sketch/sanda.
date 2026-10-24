@@ -109,8 +109,8 @@ app.post('/api/video', async (req, res) => {
 
   // Prefer Agnes Video 2.0: the provider's current catalog documents this model,
   // and it may use a separate queue from the congested 2.5 Flash pool.
-  const modelName = 'agnes-video-v2.0';
-  const payload = { model: modelName, prompt: prompt.trim().slice(0, 3000), width: 1280, height: 720, num_frames: 121, frame_rate: 24 };
+  const modelName = 'agnes-video-2.5-flash';
+  const payload = { model: modelName, prompt: prompt.trim().slice(0, 3000), mode: 'text', seconds: '5', size: '720P', aspect_ratio: '16:9', n: 1 };
   let lastStatus = 0;
   let providerMessage = '';
   try {
@@ -160,8 +160,8 @@ app.get('/api/video/:videoId', async (req, res) => {
   const id = String(req.params.videoId || '');
   if (!/^[a-zA-Z0-9_-]{1,200}$/.test(id)) return res.status(400).json({ error: 'رقم مهمة الفيديو غير صالح.' });
   try {
-    const requestedModel = String(req.query.model || 'agnes-video-v2.0');
-    const modelName = ['agnes-video-v2.0', 'agnes-video-2.5-flash'].includes(requestedModel) ? requestedModel : 'agnes-video-v2.0';
+    const requestedModel = String(req.query.model || 'agnes-video-2.5-flash');
+    const modelName = requestedModel === 'agnes-video-2.5-flash' ? requestedModel : 'agnes-video-2.5-flash';
     const r = await fetch('https://apihub.agnes-ai.com/agnesapi?video_id=' + encodeURIComponent(id) + '&model_name=' + encodeURIComponent(modelName), { headers: { Authorization: `Bearer ${process.env.AGNES_API_KEY}` }, signal: AbortSignal.timeout(20000) });
     const d = await r.json().catch(() => ({}));
     if (!r.ok) return res.status(502).json({ error: 'تعذّر التحقق من حالة الفيديو.' });
