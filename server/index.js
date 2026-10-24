@@ -105,31 +105,53 @@ app.post('/api/ai', async (req, res) => {
 app.post('/api/video', async (req, res) => {
   const prompt = req.body?.prompt;
   if (typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'اكتبي وصف الفيديو أولًا.' });
-  if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: 'مفتاح محرك الفيديو المجاني غير مضاف إلى الخادم بعد. لم يتم تفعيل أي خدمة مدفوعة.' });
+  if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: 'مفتاح محرك الفيديو غير مضاف إلى الخادم.' });
+
+  // Agnes removed the legacy v2.0 model; use the current 2.5 Flash schema.
+  const modelName = 'agnes-video-2.5-flash';
+  const payload = { model: modelName, prompt: prompt.trim().slice(0, 3000), mode: 'text', seconds: '5', size: '720P', aspect_ratio: '16:9', n: 1 };
+  let lastStatus = 0;
+  let providerMessage = '';
   try {
-    let modelName = 'agnes-video-v2.0';
-    let r = await fetch('https://apihub.agnes-ai.com/v1/videos', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AGNES_API_KEY}` }, body: JSON.stringify({ model: modelName, prompt: prompt.trim().slice(0, 3000), width: 1152, height: 768, num_frames: 121, frame_rate: 24 }), signal: AbortSignal.timeout(30000) });
-    let d = await r.json().catch(() => ({}));
-    let providerMessage = String(d?.error?.message || d?.message || '').replace(/[\\r\\n]+/g, ' ').slice(0, 240);
-    // Automatic fallback to the current 2.5 video endpoint when the legacy v2 model is temporarily unavailable.
-    if (!r.ok && r.status === 500) {
-      console.warn('Agnes legacy video model unavailable; trying 2.5 Flash fallback.');
-      modelName = 'agnes-video-2.5-flash';
-      r = await fetch('https://apihub.agnes-ai.com/v1/videos', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AGNES_API_KEY}` }, body: JSON.stringify({ model: modelName, prompt: prompt.trim().slice(0, 3000), mode: 'text', seconds: '5', size: '720P', aspect_ratio: '16:9', n: 1 }), signal: AbortSignal.timeout(30000) });
-      d = await r.json().catch(() => ({}));
+    // Free video workers are often saturated. Retry temporary queue-full responses
+    // with backoff instead of failing immediately; no task is created by a rejected submission.
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const r = await fetch('https://apihub.agnes-ai.com/v1/videos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AGNES_API_KEY}` },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30000)
+      });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok) {
+        const videoId = d.video_id || d.task_id || d.id;
+        if (!videoId) return res.status(502).json({ error: 'لم يرجع مزوّد الفيديو رقم المهمة.' });
+        return res.json({ videoId: String(videoId), modelName, status: 'pending' });
+      }
+      lastStatus = r.status;
       providerMessage = String(d?.error?.message || d?.message || '').replace(/[\\r\\n]+/g, ' ').slice(0, 240);
+      const queueFull = r.status === 503 && /queue is full|video_queue_full|temporarily unavailable|service busy/i.test(providerMessage);
+      console.warn('Agnes video create failed:', r.status, providerMessage || 'no provider message', 'attempt', attempt);
+      if (queueFull && attempt < 5) {
+        await new Promise(resolve => setTimeout(resolve, 30000));
+        continue;
+      }
+      if ([500, 502, 503, 504].includes(r.status) && attempt < 3) {
+        await new Promise(resolve => setTimeout(resolve, 15000));
+        continue;
+      }
+      break;
     }
-    if (!r.ok) {
-      console.warn('Agnes video create failed:', r.status, providerMessage || 'no provider message');
-      if (r.status === 401 || r.status === 403) return res.status(502).json({ error: 'مفتاح محرك الفيديو غير مقبول أو لا يملك صلاحية الوصول.' });
-      if (r.status === 400) return res.status(502).json({ error: 'رفض مزوّد الفيديو إعدادات الطلب (HTTP 400). ' + (providerMessage || 'تحققي من صلاحية النموذج.') });
-      if (r.status === 429) return res.status(502).json({ error: 'وصل حساب الفيديو إلى حد الطلبات المجانية مؤقتًا. انتظري قليلًا قبل المحاولة.' });
-      return res.status(502).json({ error: 'تعذّر إنشاء الفيديو من المزوّد (HTTP ' + r.status + '). ' + (providerMessage || 'حاولي لاحقًا.') });
+    if (lastStatus === 401 || lastStatus === 403) return res.status(502).json({ error: 'مفتاح محرك الفيديو غير مقبول أو لا يملك صلاحية الوصول.' });
+    if (lastStatus === 429) return res.status(502).json({ error: 'وصل حساب الفيديو إلى حد الطلبات مؤقتًا. انتظري قليلًا قبل المحاولة.' });
+    if (lastStatus === 503 && /queue is full|video_queue_full/i.test(providerMessage)) {
+      return res.status(502).json({ error: 'طابور الفيديو المجاني لدى المزوّد ما زال ممتلئًا بعد عدة محاولات تلقائية. لم يبدأ إنشاء الفيديو ولم يُخصم رصيد؛ جرّبي لاحقًا.' });
     }
-    const videoId = d.video_id || d.task_id || d.id;
-    if (!videoId) return res.status(502).json({ error: 'لم يرجع المزوّد رقم مهمة الفيديو.' });
-    return res.json({ videoId: String(videoId), modelName, status: 'pending' });
-  } catch { return res.status(502).json({ error: 'تعذّر الاتصال بمزوّد الفيديو.' }); }
+    return res.status(502).json({ error: 'تعذّر إنشاء الفيديو من المزوّد (HTTP ' + lastStatus + '). ' + (providerMessage || 'حاولي لاحقًا.') });
+  } catch (err) {
+    console.error('Agnes video request failed:', err?.message || 'unknown');
+    return res.status(502).json({ error: 'انقطع الاتصال بمزوّد الفيديو أثناء الإرسال. جرّبي مرة أخرى بعد قليل.' });
+  }
 });
 
 app.get('/api/video/:videoId', async (req, res) => {
