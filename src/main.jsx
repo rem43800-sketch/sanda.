@@ -119,12 +119,16 @@ function Bar({v,set,ph,go,label,s,children}){return <Box><textarea className="fl
 function Shell({kind,children}){const [title,kick,bg,dk]=WS[kind];return <div style={{background:bg,...(dk?DARK:{}),color:"var(--ink)"}} className="min-h-full p-4 md:p-5"><div className="mb-4"><div className="mut text-xs">{kick}</div><h1 className="text-xl font-bold">{title}</h1></div>{children}</div>}
 function Tool({kind,idea}){const C={video:VideoT,image:ImageT,store:StoreT,plan:PlanT,pod:AudioT,pres:SlidesT,docs:DocsT,diag:DiagT}[kind];return <Shell kind={kind}><C idea={idea}/></Shell>}
 
-function ImageT({idea}){const [p,setP]=useState(idea),[st,setSt]=useState("رسم توضيحي ملون"),[im,setIm]=useState([]),[s,job]=useJob();
-  const go=()=>job("جارٍ إنشاء صورة واحدة",async()=>{const prompt="أنشئ رسماً واحداً فقط بصيغة SVG لوصف: «"+p+"». النمط: "+st+". أعد JSON فقط بالشكل المطلوب. اجعل SVG موجزاً ومكتملاً أقل من 1600 حرف، بتكوين واضح وألوان وتدرجات مناسبة. لا تستخدم سكربتات أو صوراً خارجية أو نصوصاً طويلة. يبدأ الرسم بـ <svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 800 800\"> وينتهي بـ </svg>.";
-    const r=await ask(prompt,'{"title":"عنوان عربي قصير","svg":"<svg xmlns=\\\"http://www.w3.org/2000/svg\\\" viewBox=\\\"0 0 800 800\\\">...</svg>"}');const svg=cleanSvg(r.svg);if(!svg)throw new Error("لم يرجع النموذج رسماً مكتملاً. جرّب وصفاً أبسط أو أعد المحاولة.");setIm([{t:String(r.title||"التصميم الناتج"),svg}]);return "تم إنشاء الصورة"});
-  return <><Bar v={p} set={setP} ph="صف الصورة التي تريدها" go={go} label="ولّد الصورة" s={s}><select className="fld !w-auto" value={st} onChange={e=>setSt(e.target.value)}>{["رسم توضيحي ملون","مسطّح بسيط","هندسي تجريدي","مشهد طبيعي"].map(x=><option key={x}>{x}</option>)}</select></Bar>
-    {im.length>0&&<div className="grid grid-cols-1 gap-3 mt-4">{im.map((x,i)=><Box key={i}><img alt={x.t} src={svgUri(x.svg)} className="w-full max-w-lg mx-auto rounded-lg aspect-square bg-white"/><b className="text-sm block mt-2">{x.t}</b><div className="flex gap-2 mt-2"><button className="gh text-xs" onClick={()=>job("جارٍ الحفظ",()=>saveFile("sanda-image.svg",x.svg))}>تنزيل SVG</button><button className="gh text-xs" onClick={()=>job("جارٍ إنشاء PNG",async()=>saveFile("sanda-image.png",await svgToPng(x.svg,1024,1024)))}>تنزيل PNG</button></div></Box>)}</div>}
-    <Note>هذه صورة توضيحية متجهية (SVG) يولّدها الذكاء الاصطناعي، وليست صورة فوتوغرافية.</Note></>}
+function ImageT({idea}){const [p,setP]=useState(idea),[st,setSt]=useState("واقعي سينمائي"),[im,setIm]=useState([]),[s,job]=useJob();
+  const go=()=>job("جارٍ إنشاء صورة فعلية عالية الجودة",async()=>{
+    const response=await fetch("/api/image",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:p,style:st})});
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok||!data.image)throw new Error(data.error||"تعذّر إنشاء الصورة. حاول مرة أخرى بعد قليل.");
+    setIm([{t:String(data.title||"الصورة الناتجة"),image:data.image,mimeType:data.mimeType||"image/png"}]);
+    return "تم إنشاء الصورة"});
+  return <><Bar v={p} set={setP} ph="صف الصورة التي تريدها بالتفصيل" go={go} label="ولّد الصورة" s={s}><select className="fld !w-auto" value={st} onChange={e=>setSt(e.target.value)}>{["واقعي سينمائي","فن مفاهيمي واقعي","رسم توضيحي احترافي","أنمي احترافي","تصوير منتجات بإضاءة استوديو"].map(x=><option key={x}>{x}</option>)}</select></Bar>
+    {im.length>0&&<div className="grid grid-cols-1 gap-3 mt-4">{im.map((x,i)=><Box key={i}><img alt={x.t} src={x.image} className="w-full max-w-3xl mx-auto rounded-lg object-contain bg-white"/><b className="text-sm block mt-2">{x.t}</b><div className="flex gap-2 mt-2"><button className="gh text-xs" onClick={()=>job("جارٍ حفظ الصورة",async()=>{const r=await fetch(x.image);const blob=await r.blob();return saveFile("sanda-image.png",blob)})}>تنزيل الصورة PNG</button></div></Box>)}</div>}
+    <Note>يستخدم سَندَ الآن نموذجًا مخصصًا لإنشاء صورة فعلية، بدل رسم أشكال SVG برمجية. تعتمد النتيجة على النموذج المتاح وحالة الخدمة.</Note></>}
 
 function VideoT({idea}){const [p,setP]=useState(idea),[sc,setSc]=useState(null),[url,setUrl]=useState(""),[blob,setBlob]=useState(null),[s,job]=useJob(),ref=useRef();
   useEffect(()=>{if(sc&&ref.current)document.fonts.load("800 72px Cairo").then(()=>drawScene(ref.current.getContext("2d"),sc[0],1))},[sc]);
