@@ -111,7 +111,7 @@ app.post('/api/image', async (req, res) => {
   if (!apiKey) {
     return res.status(503).json({ error: 'خدمة إنشاء الصور غير مهيأة على الخادم.' });
   }
-  const fullPrompt = `Generate one high-quality image from this description: ${prompt}. Visual direction: ${style || 'cinematic photorealistic concept art'}. Create a polished, detailed, professional image with rich lighting, depth, realistic materials, coherent perspective, nuanced textures, and strong composition. Do not create an icon, logo, infographic, wireframe, geometric placeholder, or simple shapes unless explicitly requested. No text, letters, watermark, or border. Return the actual image, not SVG or code.`;
+  const fullPrompt = `Create ONE clear, polished, high-resolution image based on this description: ${prompt}. Style: ${style || 'cinematic photorealism'}. COMPOSITION RULES: one main subject, simple readable composition, clear separation between foreground, middle ground and background, realistic proportions and perspective, clean object boundaries, balanced spacing, crisp focus, detailed textures, natural lighting and shadows. Avoid crowded scenes, duplicated objects, fused buildings, overlapping structures, tangled shapes, blurry details, visual noise, collage layouts, text, letters, watermarks and borders. Keep the requested subject recognizable and visually coherent. Output a finished image only, not SVG, code, or an explanation.`;
   const modelsToTry = [...new Set([
     process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
     'gemini-3.1-flash-image-preview'
@@ -157,8 +157,8 @@ app.post('/api/image', async (req, res) => {
   }
   // Last-resort free provider: anonymous legacy Pollinations endpoint. This is best-effort and may rate-limit.
   try {
-    const fallbackPrompt = `${prompt}. Style: ${style || 'cinematic photorealistic concept art'}. Detailed, polished image; coherent perspective and lighting; no text, watermark, border, icon, logo, infographic, or geometric placeholder.`;
-    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fallbackPrompt)}?width=1024&height=1024&model=flux&nologo=true`;
+    const fallbackPrompt = `Create one clear, high-quality image: ${prompt}. Style: ${style || 'cinematic photorealism'}. One main subject, uncluttered composition, distinct objects with visible space between them, accurate perspective, sharp focus, clear edges, realistic materials, balanced lighting and shadows. Avoid crowded or fused objects, duplicated structures, blurry details, visual noise, text, watermark, border, icon, logo, infographic, or geometric placeholder.`;
+    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fallbackPrompt)}?width=1024&height=1024&model=flux&enhance=true&nologo=true`;
     const fallbackController = new AbortController();
     const fallbackTimeout = setTimeout(() => fallbackController.abort(), 90000);
     try {
