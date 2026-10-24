@@ -25,7 +25,8 @@ app.post('/api/ai', async (req, res) => {
   }
 
   try {
-    const model = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+    const primaryModel = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+    const modelsToTry = [...new Set([primaryModel, 'gemini-3.5-flash-lite', 'gemini-3.6-flash'])];
     const requestBody = JSON.stringify({
       systemInstruction: {
         parts: [{ text: `أنت مساعد منصة سَندَ العربية. أجب باللغة التي يطلبها المستخدم، والعربية افتراضيًا. أعد JSON صالحًا فقط دون Markdown. البنية المطلوبة: ${schema || 'JSON مناسب للمهمة'}` }]
@@ -34,25 +35,43 @@ app.post('/api/ai', async (req, res) => {
       generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 1024 }
     });
 
-    // Keep the demo responsive: fail fast instead of leaving the user waiting indefinitely.
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000);
+    // Try stable fallback models when the primary model is temporarily overloaded.
     let response;
     let data = {};
-    try {
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: requestBody,
-        signal: controller.signal
-      });
-      data = await response.json().catch(() => ({}));
-    } finally {
-      clearTimeout(timeoutId);
+    let lastStatus = 0;
+    for (const model of modelsToTry) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 45000);
+      try {
+        response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: requestBody,
+          signal: controller.signal
+        });
+        data = await response.json().catch(() => ({}));
+      } catch (err) {
+        clearTimeout(timeoutId);
+        if (err?.name === 'AbortError') {
+          console.warn(`Gemini request timed out for model ${model}`);
+          continue;
+        }
+        console.warn(`Gemini request failed for model ${model}:`, err?.message || 'unknown');
+        continue;
+      } finally {
+        clearTimeout(timeoutId);
+      }
+      if (response.ok) break;
+      lastStatus = response.status;
+      console.warn(`Gemini model ${model} returned HTTP ${response.status}:`, data?.error?.message || 'unknown');
+      if (![429, 500, 502, 503, 504].includes(response.status)) break;
     }
-    if (!response.ok) {
-      console.error('Gemini API error:', response.status, data?.error?.message || 'unknown');
-      return res.status(502).json({ error: 'نواجه مشكلة مؤقتة في إنشاء النتيجة. يرجى المحاولة لاحقًا.' });
+    if (!response?.ok) {
+      return res.status(502).json({
+        error: lastStatus === 429 || lastStatus === 503
+          ? 'خدمة الذكاء الاصطناعي مزدحمة مؤقتًا. انتقلنا بين النماذج المتاحة؛ يرجى المحاولة بعد قليل.'
+          : 'نواجه مشكلة مؤقتة في إنشاء النتيجة. يرجى المحاولة لاحقًا.'
+      });
     }
 
     const raw = (data?.candidates?.[0]?.content?.parts || [])
