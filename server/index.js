@@ -64,6 +64,10 @@ app.post('/api/ai', async (req, res) => {
       return res.status(502).json({ error: 'لم نتمكن من تجهيز النتيجة هذه المرة. جرّب مرة أخرى.' });
     }
   } catch (err) {
+    if (err?.name === 'AbortError') {
+      console.warn('Gemini request timed out after 9 seconds');
+      return res.status(504).json({ error: 'تأخر إنشاء النتيجة أكثر من اللازم. جرّب مرة أخرى، ولن نترك الطلب معلّقًا.' });
+    }
     console.error('Gemini request failed:', err?.message || 'unknown');
     return res.status(502).json({ error: 'نواجه مشكلة مؤقتة في إنشاء النتيجة. يرجى المحاولة لاحقًا.' });
   }
