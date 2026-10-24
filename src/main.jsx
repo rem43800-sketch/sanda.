@@ -150,7 +150,7 @@ function VideoT({idea}){
         return "اكتمل إنشاء الفيديو بالذكاء الاصطناعي.";
       }
       if(state.status==="failed")throw new Error(state.error||"لم يكتمل إنشاء الفيديو. جرّبي وصفًا آخر.");
-      setStatusText(state.progress>0?"جارٍ إنشاء الفيديو ("+state.progress+"%)… قد يستغرق عدة دقائق.":"جارٍ إنشاء الفيديو… قد يستغرق عدة دقائق.");
+      setStatusText(state.message || (state.progress>0?"جارٍ إنشاء الفيديو ("+state.progress+"%)… قد يستغرق عدة دقائق.":"جارٍ إنشاء الفيديو… قد يستغرق عدة دقائق."));
     }
     throw new Error("ما زال الفيديو قيد المعالجة بعد 15 دقيقة. لم نبدأ طلبًا جديدًا؛ جرّبي التحقق لاحقًا.");
   });
