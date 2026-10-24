@@ -261,7 +261,7 @@ app.post('/api/image', async (req, res) => {
               }
             }
           } else {
-            const imageBase64 = String(generated).replace(/^data:image\\/[^;]+;base64,/, '');
+            const imageBase64 = String(generated).includes(',') ? String(generated).slice(String(generated).indexOf(',') + 1) : String(generated);
             if (imageBase64.length > 1000) {
               return res.json({ title: String(prompt).trim().slice(0, 100) || 'الصورة الناتجة', image: `data:image/webp;base64,${imageBase64}`, mimeType: 'image/webp', provider: 'ai-horde' });
             }
