@@ -36,7 +36,7 @@ app.post('/api/ai', async (req, res) => {
 
     // Keep the demo responsive: fail fast instead of leaving the user waiting indefinitely.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000);
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
     let response;
     let data = {};
     try {
@@ -74,7 +74,7 @@ app.post('/api/ai', async (req, res) => {
     }
   } catch (err) {
     if (err?.name === 'AbortError') {
-      console.warn('Gemini request timed out after 45 seconds');
+      console.warn('Gemini request timed out after 90 seconds');
       return res.status(504).json({ error: 'تأخر مزوّد الذكاء الاصطناعي في الرد. جرّب مرة أخرى بعد دقيقة؛ لم تُحذف فكرتك.' });
     }
     console.error('Gemini request failed:', err?.message || 'unknown');
