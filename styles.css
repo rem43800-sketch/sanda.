@@ -1,7 +1,8 @@
+@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import url("https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap");
 
 :root{--bg:#F5F2FC;--surf:#fff;--ink:#1F1844;--mut:#6B6490;--line:#E4DFF4;--ind:#342078;--vio:#6D4AE6;--cy:#28B6D0;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 @media (prefers-color-scheme:dark){:root:not([data-x]){--land:#181523}}
