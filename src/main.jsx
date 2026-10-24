@@ -142,7 +142,7 @@ function VideoT({idea}){
     const deadline=Date.now()+15*60*1000;
     while(Date.now()<deadline){
       await new Promise(resolve=>setTimeout(resolve,25000));
-      const check=await fetch("/api/video/"+encodeURIComponent(data.videoId));
+      const check=await fetch("/api/video/"+encodeURIComponent(data.videoId)+"?model="+encodeURIComponent(data.modelName||"agnes-video-v2.0"));
       const state=await check.json().catch(()=>({}));
       if(!check.ok)throw new Error(state.error||"تعذّر التحقق من حالة الفيديو.");
       if(state.status==="completed"&&state.videoUrl){
