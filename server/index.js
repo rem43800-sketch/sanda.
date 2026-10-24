@@ -61,7 +61,16 @@ app.post('/api/ai', async (req, res) => {
     try {
       return res.json({ result: JSON.parse(raw) });
     } catch {
-      return res.status(502).json({ error: 'لم نتمكن من تجهيز النتيجة هذه المرة. جرّب مرة أخرى.' });
+      // Some model responses wrap valid JSON in extra text; recover the JSON object if possible.
+      const first = raw.indexOf('{');
+      const last = raw.lastIndexOf('}');
+      if (first >= 0 && last > first) {
+        try {
+          return res.json({ result: JSON.parse(raw.slice(first, last + 1)) });
+        } catch {}
+      }
+      console.error('Gemini returned invalid JSON:', raw.slice(0, 500));
+      return res.status(502).json({ error: 'وصلت استجابة غير مكتملة من الذكاء الاصطناعي. جرّب وصفًا أقصر.' });
     }
   } catch (err) {
     if (err?.name === 'AbortError') {
