@@ -112,7 +112,7 @@ app.post('/api/video', async (req, res) => {
     let d = await r.json().catch(() => ({}));
     let providerMessage = String(d?.error?.message || d?.message || '').replace(/[\\r\\n]+/g, ' ').slice(0, 240);
     // Automatic fallback to the current 2.5 video endpoint when the legacy v2 model is temporarily unavailable.
-    if (!r.ok && r.status === 500 && /temporarily unavailable|try again later/i.test(providerMessage)) {
+    if (!r.ok && r.status === 500) {
       console.warn('Agnes legacy video model unavailable; trying 2.5 Flash fallback.');
       modelName = 'agnes-video-2.5-flash';
       r = await fetch('https://apihub.agnes-ai.com/v1/videos', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${process.env.AGNES_API_KEY}` }, body: JSON.stringify({ model: modelName, prompt: prompt.trim().slice(0, 3000), mode: 'text', seconds: '5', size: '720P', aspect_ratio: '16:9', n: 1 }), signal: AbortSignal.timeout(30000) });
