@@ -174,7 +174,25 @@ app.post('/api/image', async (req, res) => {
       if (translated && translated.length > 5) imageDescription = translated;
     }
   } catch (translationError) {
-    console.warn('Image prompt translation unavailable; using original prompt.');
+    console.warn('Image prompt translation unavailable; trying public translation fallback.');
+  }
+
+  // If Gemini translation is quota-blocked, translate Arabic to English before sending it to image providers.
+  if (/[\\u0600-\\u06FF]/.test(imageDescription)) {
+    try {
+      const translateUrl = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=ar&tl=en&dt=t&q=' + encodeURIComponent(imageDescription);
+      const translateResponse = await fetch(translateUrl, { signal: AbortSignal.timeout(10000) });
+      if (translateResponse.ok) {
+        const translateData = await translateResponse.json();
+        const translatedText = Array.isArray(translateData?.[0]) ? translateData[0].map(segment => Array.isArray(segment) ? segment[0] || '' : '').join('').trim() : '';
+        if (translatedText.length > 5 && !/[\\u0600-\\u06FF]/.test(translatedText)) {
+          imageDescription = translatedText;
+          console.log('Arabic image prompt translated to English using fallback translator.');
+        }
+      }
+    } catch {
+      console.warn('Fallback image prompt translation failed.');
+    }
   }
 
   // First fallback: legacy Pollinations endpoint (may require a key or return 402).
