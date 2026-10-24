@@ -101,6 +101,63 @@ app.post('/api/ai', async (req, res) => {
   }
 });
 
+
+app.post('/api/image', async (req, res) => {
+  const { prompt, style } = req.body || {};
+  if (!prompt || typeof prompt !== 'string') {
+    return res.status(400).json({ error: 'اكتب وصف الصورة أولًا.' });
+  }
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return res.status(503).json({ error: 'خدمة إنشاء الصور غير مهيأة على الخادم.' });
+  }
+  const fullPrompt = `Generate one high-quality image from this description: ${prompt}. Visual direction: ${style || 'cinematic photorealistic concept art'}. Create a polished, detailed, professional image with rich lighting, depth, realistic materials, coherent perspective, nuanced textures, and strong composition. Do not create an icon, logo, infographic, wireframe, geometric placeholder, or simple shapes unless explicitly requested. No text, letters, watermark, or border. Return the actual image, not SVG or code.`;
+  const modelsToTry = [...new Set([
+    process.env.GEMINI_IMAGE_MODEL || 'gemini-2.5-flash-image',
+    'gemini-3.1-flash-image-preview'
+  ])];
+  let lastMessage = '';
+  for (const model of modelsToTry) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000);
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
+          generationConfig: { responseModalities: ['TEXT', 'IMAGE'] }
+        }),
+        signal: controller.signal
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        lastMessage = data?.error?.message || `HTTP ${response.status}`;
+        console.warn(`Gemini image model ${model} returned HTTP ${response.status}:`, lastMessage);
+        if ([400, 401, 403, 404, 429, 500, 502, 503, 504].includes(response.status)) continue;
+        break;
+      }
+      const parts = data?.candidates?.[0]?.content?.parts || [];
+      const imagePart = parts.find(part => part?.inlineData?.data && String(part.inlineData.mimeType || '').startsWith('image/'));
+      if (imagePart) {
+        return res.json({
+          title: String(prompt).trim().slice(0, 100) || 'الصورة الناتجة',
+          image: `data:${imagePart.inlineData.mimeType};base64,${imagePart.inlineData.data}`,
+          mimeType: imagePart.inlineData.mimeType
+        });
+      }
+      lastMessage = parts.map(part => part.text || '').join(' ').slice(0, 300) || 'لم يُرجع النموذج بيانات صورة.';
+      console.warn(`Gemini image model ${model} returned no image:`, lastMessage);
+    } catch (err) {
+      lastMessage = err?.name === 'AbortError' ? 'انتهت مهلة إنشاء الصورة.' : (err?.message || 'unknown');
+      console.warn(`Gemini image request failed for model ${model}:`, lastMessage);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+  return res.status(502).json({ error: 'تعذّر إنشاء صورة فعلية من مزوّد الصور حاليًا. ' + (lastMessage ? 'التفاصيل: ' + lastMessage : 'حاول لاحقًا.') });
+});
+
 const dist = path.resolve(__dirname, '../dist');
 app.use(express.static(dist));
 app.get('*', (req, res, next) => {
