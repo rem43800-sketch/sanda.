@@ -31,12 +31,12 @@ app.post('/api/ai', async (req, res) => {
         parts: [{ text: `أنت مساعد منصة سَندَ العربية. أجب باللغة التي يطلبها المستخدم، والعربية افتراضيًا. أعد JSON صالحًا فقط دون Markdown. البنية المطلوبة: ${schema || 'JSON مناسب للمهمة'}` }]
       },
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 1536 }
+      generationConfig: { responseMimeType: 'application/json', temperature: 0.7, maxOutputTokens: 1024 }
     });
 
     // Keep the demo responsive: fail fast instead of leaving the user waiting indefinitely.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 25000);
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
     let response;
     let data = {};
     try {
@@ -74,8 +74,8 @@ app.post('/api/ai', async (req, res) => {
     }
   } catch (err) {
     if (err?.name === 'AbortError') {
-      console.warn('Gemini request timed out after 25 seconds');
-      return res.status(504).json({ error: 'استغرق إنشاء النتيجة وقتًا أطول من المعتاد. جرّب مرة أخرى بعد قليل.' });
+      console.warn('Gemini request timed out after 45 seconds');
+      return res.status(504).json({ error: 'تأخر مزوّد الذكاء الاصطناعي في الرد. جرّب مرة أخرى بعد دقيقة؛ لم تُحذف فكرتك.' });
     }
     console.error('Gemini request failed:', err?.message || 'unknown');
     return res.status(502).json({ error: 'نواجه مشكلة مؤقتة في إنشاء النتيجة. يرجى المحاولة لاحقًا.' });
