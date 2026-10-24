@@ -195,30 +195,8 @@ app.post('/api/image', async (req, res) => {
     }
   }
 
-  // First fallback: legacy Pollinations endpoint (may require a key or return 402).
-  try {
-    const fallbackPrompt = `Faithfully create exactly the scene described here, without adding unrelated subjects: ${imageDescription}. Style: ${style || 'cinematic photorealism'}. Composition: one coherent scene, clear main subject, uncluttered background, realistic architecture and perspective, distinct buildings with visible gaps, sharp focus, clean edges, natural shadows, balanced cinematic lighting. Do not add people, faces, human figures, long-haired characters, clothing, or unrelated objects unless explicitly requested. No fused structures, duplicated objects, overlapping subjects, collage, blur, visual noise, text, watermark, border, icon, logo, infographic, or geometric placeholder.`;
-    const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(fallbackPrompt)}?width=1024&height=1024&model=flux&enhance=true&nologo=true`;
-    const fallbackController = new AbortController();
-    const fallbackTimeout = setTimeout(() => fallbackController.abort(), 45000);
-    try {
-      const fallbackResponse = await fetch(fallbackUrl, { signal: fallbackController.signal, headers: { Accept: 'image/*' } });
-      const contentType = fallbackResponse.headers.get('content-type') || '';
-      // Do not return Pollinations images directly: this provider has produced unrelated results
-      // in real user tests. Continue to the AI Horde provider, or return a clear error below.
-      if (fallbackResponse.ok && contentType.startsWith('image/')) {
-        console.warn('Pollinations returned an image but it is skipped because relevance is unreliable.');
-      } else {
-        lastMessage = `Pollinations HTTP ${fallbackResponse.status}`;
-        console.warn('Pollinations image fallback unavailable:', lastMessage);
-      }
-    } finally {
-      clearTimeout(fallbackTimeout);
-    }
-  } catch (fallbackError) {
-    lastMessage = fallbackError?.message || 'Pollinations fallback failed';
-    console.warn('Pollinations image fallback failed:', lastMessage);
-  }
+  // Skip Pollinations because it has returned unrelated images.
+  console.log('Gemini image quota unavailable; switching directly to AI Horde fallback.');
 
   // Second fallback: AI Horde anonymous community workers. This can be slower and queue-dependent.
   try {
@@ -242,6 +220,7 @@ app.post('/api/image', async (req, res) => {
       console.warn('AI Horde image fallback unavailable:', lastMessage);
     } else {
       const jobId = hordeData.id;
+      console.log('AI Horde accepted image job; waiting for a community worker.');
       const deadline = Date.now() + 150000;
       let completed = false;
       while (Date.now() < deadline) {
@@ -259,7 +238,7 @@ app.post('/api/image', async (req, res) => {
           lastMessage = 'AI Horde worker could not generate the image.';
           break;
         }
-        if (checkData?.done) { completed = true; break; }
+        if (checkData?.done) { completed = true; console.log('AI Horde image job completed.'); break; }
       }
       if (completed) {
         const statusResponse = await fetch(`https://aihorde.net/api/v2/generate/status/${encodeURIComponent(jobId)}`, {
