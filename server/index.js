@@ -107,9 +107,10 @@ app.post('/api/video', async (req, res) => {
   if (typeof prompt !== 'string' || !prompt.trim()) return res.status(400).json({ error: 'اكتبي وصف الفيديو أولًا.' });
   if (!process.env.AGNES_API_KEY) return res.status(503).json({ error: 'مفتاح محرك الفيديو غير مضاف إلى الخادم.' });
 
-  // Agnes removed the legacy v2.0 model; use the current 2.5 Flash schema.
-  const modelName = 'agnes-video-2.5-flash';
-  const payload = { model: modelName, prompt: prompt.trim().slice(0, 3000), mode: 'text', seconds: '5', size: '720P', aspect_ratio: '16:9', n: 1 };
+  // Prefer Agnes Video 2.0: the provider's current catalog documents this model,
+  // and it may use a separate queue from the congested 2.5 Flash pool.
+  const modelName = 'agnes-video-v2.0';
+  const payload = { model: modelName, prompt: prompt.trim().slice(0, 3000), width: 1280, height: 720, num_frames: 121, frame_rate: 24 };
   let lastStatus = 0;
   let providerMessage = '';
   try {
