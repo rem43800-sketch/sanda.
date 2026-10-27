@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#080d23">
+<title>FocusTown | مدينة التركيز</title>
+<script src="https://code.playcanvas.com/playcanvas-stable.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap');
+:root{--ink:#f7f7ff;--muted:#abb6d6;--glass:rgba(13,20,48,.72);--line:rgba(182,206,255,.16);--cyan:#5cf4ef;--violet:#8e82ff;--gold:#ffd98b}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#080d23;color:var(--ink);font-family:'IBM Plex Sans Arabic',system-ui,sans-serif}canvas{position:fixed;inset:0;width:100%;height:100%;display:block;outline:0;touch-action:none}
+#loading{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 30%,#1a2860 0%,#0a102a 52%,#050815 100%);transition:opacity .7s}
+.load-card{text-align:center;width:min(460px,88vw);padding:32px 24px;border:1px solid var(--line);background:rgba(10,17,42,.66);border-radius:28px;box-shadow:0 25px 90px #02040e88}
+.mark{width:62px;height:62px;margin:0 auto 15px;border-radius:20px;display:grid;place-items:center;background:linear-gradient(135deg,#39d9df,#8f70ff);box-shadow:0 0 35px #5cf4ef33;font-size:29px;color:#07122b}
+.brand{font-size:clamp(25px,5vw,39px);font-weight:700;letter-spacing:.5px;line-height:1.3}.brand span{color:var(--cyan)}.arabic-title{color:#dce5ff;font-size:19px;margin-top:3px}.tagline{color:var(--muted);font-size:13px;margin:14px 0 23px;line-height:1.8}
+.primary{border:0;border-radius:14px;padding:13px 23px;color:#071329;font:700 15px inherit;font-family:inherit;background:linear-gradient(110deg,#5cf4ef,#a8f5e9 50%,#c3b6ff);cursor:pointer;box-shadow:0 8px 26px #54f3ee23;transition:transform .2s,filter .2s}.primary:hover{transform:translateY(-2px);filter:brightness(1.07)}.small-note{font-size:11px;color:#8794b8;margin-top:15px}
+#hud{display:none;position:fixed;inset:0;pointer-events:none}
+.panel{background:var(--glass);border:1px solid var(--line);border-radius:18px;backdrop-filter:blur(18px);box-shadow:0 16px 45px #02061140}
+.topbar{position:absolute;top:18px;left:18px;right:18px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.identity{padding:11px 15px;display:flex;align-items:center;gap:11px}.mini-mark{width:36px;height:36px;border-radius:12px;display:grid;place-items:center;background:linear-gradient(135deg,#45dfe7,#8878ff);color:#081027;font-size:17px}.id-en{font-size:15px;font-weight:700;letter-spacing:1px}.id-ar{font-size:11px;color:var(--muted)}
+.stats{display:flex;gap:8px;pointer-events:auto}.stat{padding:10px 13px;min-width:83px;text-align:center}.stat small{display:block;color:var(--muted);font-size:10px}.stat b{font-size:17px;direction:ltr;display:block}
+.right-panel{position:absolute;top:105px;right:18px;width:204px;padding:14px;pointer-events:auto}.eyebrow{font-size:10px;color:var(--cyan);letter-spacing:1.5px;font-weight:700}.panel-title{font-size:16px;font-weight:700;margin:3px 0 10px}.zone{width:100%;display:flex;align-items:center;gap:10px;border:1px solid transparent;border-radius:12px;background:rgba(255,255,255,.035);color:var(--ink);text-align:right;font:inherit;padding:10px;margin-top:7px;cursor:pointer;transition:.2s}.zone:hover,.zone.active{background:#73e7e514;border-color:#5cf4ef55}.zone .emoji{width:31px;height:31px;border-radius:10px;display:grid;place-items:center;background:#7f8fff18;font-size:16px}.zone strong{font-size:12px;display:block}.zone small{font-size:10px;color:var(--muted);display:block;margin-top:1px}
+.bottom-left{position:absolute;bottom:18px;left:18px;padding:12px 15px;max-width:285px}.bottom-left strong{font-size:12px;display:block}.bottom-left span{font-size:11px;color:var(--muted)}.keycap{display:inline-grid;place-items:center;min-width:22px;height:22px;margin:0 2px;border-radius:6px;border:1px solid #becbff35;background:#fff1;color:#e6edff;font-size:10px;padding:0 5px}
+.hint{position:absolute;bottom:20px;left:50%;transform:translateX(-50%);padding:10px 16px;border-radius:100px;background:#08102ab8;border:1px solid #c4d4ff25;font-size:11px;color:#e4eaff;white-space:nowrap}
+#nearby{position:absolute;bottom:75px;left:50%;transform:translateX(-50%);font-size:12px;padding:10px 16px;max-width:85vw;white-space:nowrap;display:none}
+#modal{position:fixed;inset:0;z-index:25;background:#0306119c;backdrop-filter:blur(7px);display:none;align-items:center;justify-content:center;padding:18px}
+.modal-card{max-width:430px;width:100%;padding:25px;border:1px solid #a8c9ff2b;border-radius:24px;background:linear-gradient(145deg,#131f48f2,#0a1028f7);box-shadow:0 30px 100px #0009}
+.modal-icon{font-size:30px;width:58px;height:58px;border-radius:18px;display:grid;place-items:center;background:#7d91ff1e;margin-bottom:12px}.modal-card h2{margin:0 0 7px;font-size:22px}.modal-card p{color:var(--muted);font-size:13px;line-height:1.9;margin:0 0 19px}.modal-actions{display:flex;gap:8px;flex-wrap:wrap}.secondary{font:inherit;font-size:13px;border-radius:13px;padding:11px 16px;background:#ffffff0b;border:1px solid var(--line);color:white;cursor:pointer}
+#mobile-controls{display:none;position:absolute;bottom:22px;right:18px;pointer-events:auto;grid-template-columns:repeat(3,42px);grid-template-rows:repeat(2,42px);gap:4px}
+.move-btn{border:1px solid #d7e3ff35;background:#111a3bbd;color:#fff;border-radius:12px;font-size:16px;backdrop-filter:blur(10px);touch-action:none}
+#mobile-controls button[data-move="forward"]{grid-column:2;grid-row:1}#mobile-controls button[data-move="left"]{grid-column:1;grid-row:2}#mobile-controls button[data-move="back"]{grid-column:2;grid-row:2}#mobile-controls button[data-move="right"]{grid-column:3;grid-row:2}
+#crosshair{display:none;position:absolute;top:50%;left:50%;width:6px;height:6px;border:1px solid #e9ffffbb;border-radius:50%;transform:translate(-50%,-50%);box-shadow:0 0 10px #55f4ef66}
+.toast{position:absolute;top:96px;left:50%;transform:translateX(-50%);font-size:12px;color:#e8ffff;background:#102b43cc;border:1px solid #65eae44d;border-radius:30px;padding:9px 15px;display:none}
+@media(max-width:700px){.topbar{top:10px;left:10px;right:10px}.identity{padding:8px 10px;gap:8px}.mini-mark{width:30px;height:30px}.id-en{font-size:12px}.id-ar{font-size:9px}.stats{gap:5px}.stat{padding:7px 8px;min-width:57px}.stat b{font-size:14px}.stat small{font-size:9px}.right-panel{top:auto;bottom:115px;right:10px;width:166px;padding:10px;max-height:42vh;overflow:auto}.panel-title{font-size:14px;margin-bottom:6px}.zone{padding:7px;gap:7px;margin-top:5px}.zone .emoji{width:27px;height:27px}.zone strong{font-size:11px}.zone small{font-size:9px}.bottom-left{display:none}.hint{bottom:10px;left:10px;transform:none;white-space:normal;max-width:52vw;font-size:10px;padding:9px 11px}#mobile-controls{display:grid;bottom:18px;right:10px}.move-btn{font-size:14px}.toast{top:77px;max-width:80vw;white-space:normal;text-align:center}.stat.session{display:none}}
+@media(max-width:390px){.id-ar{display:none}.right-panel{width:152px}.stats .stat:nth-child(2){display:none}}
+</style>
+</head>
+<body>
+<canvas id="application" aria-label="FocusTown 3D city"></canvas>
+<div id="loading">
+ <div class="load-card">
+  <div class="mark">✦</div>
+  <div class="brand">FOCUS<span>TOWN</span></div>
+  <div class="arabic-title">مدينة التركيز</div>
+  <div class="tagline">مساحتك الهادئة للتعلّم والإنجاز.<br>استكشف مدينة ثلاثية الأبعاد، واختر المكان الذي يساعدك على التركيز.</div>
+  <button class="primary" id="start">ابدأ الاستكشاف&nbsp; ←</button>
+  <div class="small-note" id="load-note">يتم تجهيز المدينة ثلاثية الأبعاد…</div>
+ </div>
+</div>
+<div id="hud">
+ <div class="topbar">
+  <div class="identity panel"><div class="mini-mark">✦</div><div><div class="id-en">FOCUSTOWN</div><div class="id-ar">مدينة التركيز · Study World</div></div></div>
+  <div class="stats">
+   <div class="stat panel"><small>منطقتك الحالية</small><b id="area-name" style="font-size:12px">ساحة المدينة</b></div>
+   <div class="stat panel"><small>جلسة التركيز</small><b id="focus-time">25:00</b></div>
+   <div class="stat panel session"><small>النمط</small><b style="font-size:12px">هادئ ✦</b></div>
+  </div>
+ </div>
+ <div class="right-panel panel">
+  <div class="eyebrow">EXPLORE THE WORLD</div><div class="panel-title">وجهتك التالية</div>
+  <button class="zone active" data-zone="plaza"><span class="emoji">🌌</span><span><strong>ساحة المدينة</strong><small>نقطة الانطلاق</small></span></button>
+  <button class="zone" data-zone="library"><span class="emoji">📚</span><span><strong>المكتبة المركزية</strong><small>تعلم واكتشف</small></span></button>
+  <button class="zone" data-zone="garden"><span class="emoji">🌿</span><span><strong>حديقة الصفاء</strong><small>استراحة هادئة</small></span></button>
+  <button class="zone" data-zone="dome"><span class="emoji">🔮</span><span><strong>قبة التركيز</strong><small>مساحة للإنجاز</small></span></button>
+  <button class="zone" data-zone="studio"><span class="emoji">💡</span><span><strong>مختبر الإبداع</strong><small>أفكار ومشاريع</small></span></button>
+ </div>
+ <div class="bottom-left panel"><strong>تجوّل بطريقتك</strong><span><span class="keycap">W</span><span class="keycap">A</span><span class="keycap">S</span><span class="keycap">D</span> للحركة · <span class="keycap">Shift</span> للسرعة · اسحب الفأرة لتغيير الاتجاه</span></div>
+ <div class="hint" id="controls-hint">WASD للتحرّك · اسحب بالفأرة للنظر · اختر وجهة من القائمة</div>
+ <div id="nearby" class="panel"></div><div id="crosshair"></div>
+ <div class="toast" id="toast"></div>
+ <div id="mobile-controls">
+   <button class="move-btn" data-move="forward" aria-label="للأمام">▲</button>
+   <button class="move-btn" data-move="left" aria-label="يسار">◀</button>
+   <button class="move-btn" data-move="back" aria-label="للخلف">▼</button>
+   <button class="move-btn" data-move="right" aria-label="يمين">▶</button>
+ </div>
+</div>
+<div id="modal"><div class="modal-card"><div class="modal-icon" id="modal-icon">📚</div><h2 id="modal-title">المكتبة المركزية</h2><p id="modal-text">مساحة هادئة للتعلّم.</p><div class="modal-actions"><button class="primary" id="modal-focus">ابدأ جلسة تركيز 25 دقيقة</button><button class="secondary" id="modal-close">متابعة الاستكشاف</button></div></div></div>
+<script>
+(function(){
+'use strict';
+const canvas=document.getElementById('application');
+const note=document.getElementById('load-note');
+if(!window.pc){note.textContent='تعذّر تحميل محرك الرسوم. تحقّق من اتصال الإنترنت ثم أعد فتح الصفحة.';return;}
+let app;
+try{
+ app=new pc.Application(canvas,{mouse:new pc.Mouse(canvas),keyboard:new pc.Keyboard(window),graphicsDeviceOptions:{antialias:true,alpha:false,depth:true,stencil:false,preserveDrawingBuffer:false}});
+ app.setCanvasFillMode(pc.FILLMODE_FILL_WINDOW);
+ app.setCanvasResolution(pc.RESOLUTION_AUTO);
+ window.addEventListener('resize',()=>app.resizeCanvas());
+ app.scene.ambientLight=new pc.Color(.38,.43,.68);
+ app.scene.gammaCorrection=pc.GAMMA_SRGB;
+ app.scene.toneMapping=pc.TONEMAP_ACES;
+}catch(err){note.textContent='لم يتمكن المتصفح من تشغيل الرسوم ثلاثية الأبعاد على هذا الجهاز.';return;}
+const root=app.root;
+const C=(r,g,b)=>new pc.Color(r/255,g/255,b/255);
+function material(name,color,emissive,metallic,opacity){
+ const m=new pc.StandardMaterial();m.name=name;m.diffuse=C(color[0],color[1],color[2]);m.metalness=metallic||0;m.gloss=65;
+ if(emissive){m.emissive=C(emissive[0],emissive[1],emissive[2]);m.emissiveIntensity=1.1;}
+ if(opacity!==undefined){m.opacity=opacity;m.blendType=pc.BLEND_NORMAL;m.depthWrite=false;}
+ m.update();return m;
+}
+const M={
+ ground:material('Midnight ground',[14,23,48]),
+ road:material('Obsidian paths',[20,31,61]),
+ path:material('Lavender stone',[42,48,89]),
+ edge:material('Cyan guide lights',[25,87,106],[25,190,220]),
+ violet:material('Violet glow',[76,46,143],[111,70,245]),
+ gold:material('Warm lanterns',[113,80,33],[255,181,75]),
+ white:material('Moonstone',[184,205,246],[66,94,165]),
+ wall:material('Periwinkle concrete',[45,57,101]),
+ wall2:material('Indigo concrete',[29,39,79]),
+ glass:material('Blue glass',[27,81,125],[32,126,186]),
+ window:material('Lit windows',[63,132,165],[55,222,234]),
+ roof:material('Roof dark',[16,24,53]),
+ grass:material('Garden moss',[24,70,70]),
+ tree:material('Jade canopy',[24,112,105],[11,44,62]),
+ leaf:material('Mint canopy',[55,147,130],[15,48,46]),
+ trunk:material('Cedar trunks',[87,66,80]),
+ flower:material('Bloom',[139,105,242],[75,37,152]),
+ silver:material('Silver rail',[92,112,162],[18,61,112]),
+ floorGlow:material('Plaza luminous inlay',[49,79,144],[25,73,168]),
+ planet:material('Sky lanterns',[47,79,155],[57,87,190])
+};
+function box(name,x,y,z,sx,sy,sz,mat,type){
+ const e=new pc.Entity(name);e.addComponent('render',{type:type||'box'});e.setLocalPosition(x,y,z);e.setLocalScale(sx,sy,sz);e.render.material=mat;root.addChild(e);return e;
+}
+function cylinder(name,x,y,z,sx,sy,sz,mat,type){return box(name,x,y,z,sx,sy,sz,mat,type||'cylinder');}
+function light(name,type,x,y,z,color,intensity,range){
+ const e=new pc.Entity(name);e.addComponent('light',{type:type,color:C(color[0],color[1],color[2]),intensity:intensity,range:range||30,castShadows:false});e.setPosition(x,y,z);root.addChild(e);return e;
+}
+const sun=light('Moonlight','directional',-35,52,28,[174,196,255],1.65,0);sun.setEulerAngles(42,35,0);
+const fill=light('City ambient','omni',0,15,0,[66,103,255],1.35,105);
+light('Library cyan glow','omni',0,7,2,[39,225,235],1.5,26);
+light('Garden violet glow','omni',-29,5,-4,[131,93,255],1.2,23);
+light('Dome azure glow','omni',27,5,-15,[44,143,255],1.45,24);
+box('Infinite island',0,-.85,0,180,1.7,180,M.ground);
+box('Main road',0,.015,0,7,.08,150,M.road);
+box('Cross road',0,.02,0,150,.08,7,M.road);
+for(let v=-66;v<=66;v+=11){
+ box('Road luminous seam',v,.075,0,.08,.04,140,M.edge);
+ box('Road luminous seam',0,.076,v,140,.04,.08,M.edge);
+}
+for(let v=-65;v<=65;v+=5){
+ box('Lane marker',0,.09,v,.17,.025,1.2,M.gold);
+ box('Lane marker',v,.09,0,1.2,.025,.17,M.gold);
+}
+function steps(x,z,count,width,depth,mat){
+ for(let i=0;i<count;i++)box('Entrance step',x,.18+i*.09,z+i*depth,width-i*.45,.24,depth,mat);
+}
+function windows(x,y,z,count,width,mat,axis){
+ for(let i=0;i<count;i++){
+  const offset=(i-(count-1)/2)*width;
+  if(axis==='x')box('Glowing window',x+offset,y,z,Math.max(.75,width*.55),2.4,.14,mat);
+  else box('Glowing window',x,y,z+offset,.14,2.4,Math.max(.75,width*.55),mat);
+ }
+}
+function mainLibrary(){
+ box('Library foundation',0,.45,-2,24,.9,18,M.path);
+ box('Library main block',0,4.25,-3,19,7.2,13,M.wall);
+ box('Library top floor',0,8.1,-3,17,.55,11,M.roof);
+ box('Library roof luminous line',0,8.42,-3,17.2,.12,11.2,M.edge);
+ box('Library front glass facade',0,4.2,3.57,14.8,5.7,.18,M.glass);
+ for(let x=-6.1;x<=6.2;x+=2.45)box('Window mullion',x,4.2,3.48,.12,5.7,.13,M.silver);
+ box('Library entrance surround',0,2.15,3.74,4.4,3.8,.45,M.wall2);
+ box('Library entrance portal',0,1.82,3.97,2.8,2.65,.15,M.window);
+ box('Library door split',0,1.75,4.08,.09,2.6,.08,M.silver);
+ box('Front canopy',0,6.1,4.55,9,.32,2.2,M.roof);
+ box('Canopy light strip',0,5.9,5.4,8.5,.08,.09,M.gold);
+ steps(0,4.1,7,7.4,.34,M.path);
+ box('Library side window strip',-9.6,4.15,-3,.16,3.3,9,M.window);
+ box('Library side window strip',9.6,4.15,-3,.16,3.3,9,M.window);
+ box('Library title panel',0,7.15,3.75,7.5,.7,.24,M.violet);
+ box('Library side wing',-12,2.4,-4,3,4.5,13,M.wall2);
+ box('Library side wing',12,2.4,-4,3,4.5,13,M.wall2);
+ box('Library roof antenna',0,9.4,-3,.35,1.6,.35,M.gold,'cylinder');
+ for(let x=-7;x<=7;x+=2.8){box('Roof skylight',x,8.46,-3,1.5,.12,7,M.glass);}
+}
+mainLibrary();
+function building(name,x,z,w,h,d,baseMat,glowMat){
+ box(name+' plaza',x,.35,z,w+2,.7,d+2,M.path);
+ box(name+' body',x,h/2+.45,z,w,h,d,baseMat);
+ box(name+' roof',x,h+.58,z,w+.45,.32,d+.45,M.roof);
+ box(name+' roof glow',x,h+.77,z,w+.6,.08,d+.6,glowMat);
+ box(name+' front glass',x,h*.48+.45,z+d/2+.08,w*.62,h*.57,.12,M.glass);
+ const n=Math.max(3,Math.floor(w/2.4));
+ for(let i=0;i<n;i++)box(name+' window',x-w*.28+i*(w*.56/Math.max(1,n-1)),h*.52+.45,z+d/2+.16,.45,h*.35,.1,glowMat);
+ box(name+' door',x,1.35,z+d/2+.18,1.8,2.55,.14,M.violet);
+ box(name+' sign',x,h+.02,z+d/2+.28,w*.6,.42,.12,glowMat);
+}
+building('Creativity lab',-27,-21,12,6.2,9,M.wall2,M.violet);
+building('Quiet study wing',-27,17,12,5.6,10,M.wall,M.window);
+building('Learning pavilion',25,22,12,6.1,10,M.wall2,M.edge);
+function dome(x,z){
+ cylinder('Dome base',x,.55,z,14,1,14,M.path);
+ cylinder('Dome lower ring',x,1.2,z,12,.35,12,M.edge);
+ const c=box('Dome core',x,4.2,z,9,5.6,9,M.glass);
+ const top=box('Dome crystalline top',x,7.5,z,7,1.6,7,M.violet,'sphere');
+ top.setLocalEulerAngles(0,45,0);
+ for(let i=0;i<8;i++){const a=i*Math.PI/4;box('Dome support',x+Math.cos(a)*5.2,3.8,z+Math.sin(a)*5.2,.18,5.3,.18,M.silver);}
+ box('Dome top light',x,8.65,z,1.3,.15,1.3,M.gold,'sphere');
+}
+dome(27,-15);
+function arch(x,z,mat){
+ box('Portal column',x-3,2.3,z,.55,4.6,.55,mat);
+ box('Portal column',x+3,2.3,z,.55,4.6,.55,mat);
+ box('Portal lintel',x,4.45,z,6.5,.5,.6,mat);
+}
+arch(0,14,M.violet);
+arch(-15,-3,M.edge);
+arch(15,-4,M.gold);
+function tree(x,z,s){
+ cylinder('Tree trunk',x,s*1.1,z,s*.28,s*2.2,s*.28,M.trunk,'cylinder');
+ cylinder('Tree crown',x,s*2.5,z,s*1.7,s*2.15,s*1.7,M.tree,'cone');
+ cylinder('Tree crown',x-s*.25,s*3.1,z+s*.08,s*1.3,s*1.7,s*1.3,M.leaf,'sphere');
+}
+const treePts=[[-37,-12],[-41,-7],[-37,0],[-40,7],[-35,12],[-31,28],[-38,33],[-18,27],[-12,27],[-37,18],[-40,-25],[-33,-29],[-21,-32],[-15,-26],[15,29],[20,31],[34,31],[39,25],[38,17],[36,4],[39,-4],[36,-30],[31,-35],[20,-31],[17,-24],[-35,39],[-28,40],[-10,39],[8,38],[30,40]];
+treePts.forEach((p,i)=>tree(p[0],p[1],1.3+(i%3)*.35));
+function lamp(x,z){
+ cylinder('Lamp post',x,1.8,z,.13,3.6,.13,M.silver,'cylinder');
+ cylinder('Lamp shade',x,3.65,z,.42,.16,.42,M.gold,'sphere');
+ cylinder('Lamp halo',x,3.9,z,.68,.05,.68,M.gold,'sphere');
+}
+for(let v=-40;v<=40;v+=8){lamp(v,9);lamp(v,-9);lamp(9,v);lamp(-9,v);}
+function bench(x,z,rot){
+ const e=box('Garden bench',x,.65,z,2.2,.22,.75,M.trunk);e.setLocalEulerAngles(0,rot||0,0);
+ const b=box('Garden bench support',x,.35,z,1.7,.5,.2,M.silver);b.setLocalEulerAngles(0,rot||0,0);
+}
+for(let i=0;i<8;i++){bench(-32+i*1.8,4,i%2?0:Math.PI/2);bench(31,8+i*1.7,Math.PI/2);}
+for(let i=0;i<18;i++){
+ const x=-42+Math.random()*84,z=-42+Math.random()*84;
+ if(Math.abs(x)<13&&Math.abs(z)<13)continue;
+ const h=1.5+Math.random()*4;
+ const rock=box('Luminous crystal',x,h,z,.45,h*1.6,.45,i%2?M.violet:M.edge,'cone');
+ rock.setLocalEulerAngles(Math.random()*12,Math.random()*40,Math.random()*10);
+}
+for(let i=0;i<50;i++){
+ const x=(Math.random()-.5)*145,y=13+Math.random()*35,z=(Math.random()-.5)*145;
+ if(Math.abs(x)<14&&Math.abs(z)<14)continue;
+ const star=box('Distant star',x,y,z,.12+Math.random()*.14,.12+Math.random()*.14,.12+Math.random()*.14,i%5===0?M.gold:M.white,'sphere');
+}
+for(let i=0;i<9;i++){
+ const x=-45+i*11,z=-48+(i%3)*3;
+ box('Floating sky island',x,14+(i%3)*2,z,3,.5,3,M.wall2,'sphere');
+ cylinder('Floating island glow',x,13.7+(i%3)*2,z,2.5,.1,2.5,M.violet,'cylinder');
+}
+for(let i=0;i<20;i++){
+ const x=(Math.random()-.5)*100,z=(Math.random()-.5)*100;
+ if(Math.abs(x)<12&&Math.abs(z)<12)continue;
+ box('Light path crystal',x,.25,z,.16,.16,.16,i%2?M.gold:M.edge,'sphere');
+}
+const cam=new pc.Entity('Explorer camera');
+cam.addComponent('camera',{clearColor:C(7,11,29),fov:72,nearClip:.1,farClip:230});
+cam.setPosition(0,1.8,38);root.addChild(cam);
+let yaw=0,pitch=-3,started=false,focusSeconds=1500,focusRunning=false,focusInterval=0,activeZone='plaza',touchLook=null;
+const held={forward:false,back:false,left:false,right:false};
+const zoneData={
+ plaza:{name:'ساحة المدينة',icon:'🌌',x:0,z:38,yaw:0,title:'ساحة المدينة',text:'مرحبًا بك في FocusTown. هذه نقطة الانطلاق إلى عالم هادئ صُمّم للدراسة والاستكشاف. تجوّل واختر المساحة المناسبة لك.'},
+ library:{name:'المكتبة المركزية',icon:'📚',x:0,z:12,yaw:0,title:'المكتبة المركزية',text:'مساحة تعلّم مضاءة بهدوء، تحيط بها النوافذ الزجاجية ومساحات القراءة. خذ مكانك وابدأ جلسة تركيز.'},
+ garden:{name:'حديقة الصفاء',icon:'🌿',x:-31,z:5,yaw:30,title:'حديقة الصفاء',text:'حديقة هادئة بين الأشجار والمصابيح. مناسبة لاستراحة قصيرة أو مراجعة ملاحظاتك بعيدًا عن ضجيج المدينة.'},
+ dome:{name:'قبة التركيز',icon:'🔮',x:27,z:-1,yaw:0,title:'قبة التركيز',text:'مساحة مستقبلية محاطة بإضاءة سماوية. استخدمها كوجهة لجلسة عمل مركّزة على مهمة واحدة.'},
+ studio:{name:'مختبر الإبداع',icon:'💡',x:-27,z:-8,yaw:25,title:'مختبر الإبداع',text:'جناح مخصص للأفكار والمشاريع الإبداعية. تنقّل هنا لتخطط لمشروعك أو تستكشف أجواء المدينة.'}
+};
+const areaEl=document.getElementById('area-name'),nearby=document.getElementById('nearby'),toast=document.getElementById('toast');
+function tell(msg){toast.textContent=msg;toast.style.display='block';clearTimeout(tell.t);tell.t=setTimeout(()=>toast.style.display='none',3000);}
+function selectZone(id,teleport){
+ const z=zoneData[id]||zoneData.plaza;activeZone=id;
+ document.querySelectorAll('.zone').forEach(b=>b.classList.toggle('active',b.dataset.zone===id));
+ if(teleport){cam.setPosition(z.x,1.8,z.z);yaw=z.yaw||0;pitch=-2;cam.setEulerAngles(pitch,yaw,0);}
+ areaEl.textContent=z.name;
+}
+document.querySelectorAll('.zone').forEach(b=>b.addEventListener('click',()=>{
+ const id=b.dataset.zone;selectZone(id,true);const z=zoneData[id];tell('وصلت إلى '+z.name);
+ if(window.innerWidth<700)document.getElementById('controls-hint').textContent='استخدم أزرار الحركة واسحب الشاشة لتغيير الاتجاه.';
+}));
+function openZone(id){
+ const z=zoneData[id];document.getElementById('modal-icon').textContent=z.icon;document.getElementById('modal-title').textContent=z.title;document.getElementById('modal-text').textContent=z.text;document.getElementById('modal').style.display='flex';
+}
+document.getElementById('modal-close').onclick=()=>document.getElementById('modal').style.display='none';
+document.getElementById('modal-focus').onclick=()=>{
+ document.getElementById('modal').style.display='none';focusRunning=true;tell('بدأت جلسة التركيز · 25 دقيقة');
+};
+let lastToastZone='';
+function startGame(){
+ if(started)return;started=true;
+ document.getElementById('loading').style.opacity='0';
+ setTimeout(()=>document.getElementById('loading').style.display='none',750);
+ document.getElementById('hud').style.display='block';
+ document.getElementById('crosshair').style.display='block';
+ if(window.innerWidth<700){document.getElementById('controls-hint').textContent='استخدم أزرار الحركة واسحب الشاشة لتغيير الاتجاه.';}
+ canvas.focus();
+}
+document.getElementById('start').addEventListener('click',()=>{
+ startGame();
+ if(window.innerWidth>700&&canvas.requestPointerLock)canvas.requestPointerLock();
+});
+document.addEventListener('pointerlockchange',()=>{
+ if(document.pointerLockElement===canvas){document.getElementById('controls-hint').textContent='اضغط Esc لتحرير المؤشر · WASD للحركة · Shift للسرعة';}
+ else if(started&&window.innerWidth>700){document.getElementById('controls-hint').textContent='اضغط داخل العالم لتثبيت المؤشر، ثم تحرّك باستخدام WASD';}
+});
+document.addEventListener('mousemove',e=>{
+ if(!started)return;
+ if(document.pointerLockElement===canvas){yaw-=e.movementX*.12;pitch-=e.movementY*.1;pitch=Math.max(-62,Math.min(62,pitch));}
+});
+canvas.addEventListener('click',()=>{if(started&&window.innerWidth>700&&document.pointerLockElement!==canvas&&canvas.requestPointerLock)canvas.requestPointerLock();});
+document.addEventListener('keydown',e=>{
+ const k=e.key.toLowerCase();if(k==='w'||k==='arrowup')held.forward=true;if(k==='s'||k==='arrowdown')held.back=true;if(k==='a'||k==='arrowleft')held.left=true;if(k==='d'||k==='arrowright')held.right=true;
+ if(k==='e'&&started){let p=cam.getPosition(),best='plaza',dist=1e9;Object.keys(zoneData).forEach(id=>{const z=zoneData[id],d=Math.hypot(p.x-z.x,p.z-z.z);if(d<dist){dist=d;best=id;}});openZone(best);}
+});
+document.addEventListener('keyup',e=>{const k=e.key.toLowerCase();if(k==='w'||k==='arrowup')held.forward=false;if(k==='s'||k==='arrowdown')held.back=false;if(k==='a'||k==='arrowleft')held.left=false;if(k==='d'||k==='arrowright')held.right=false;});
+document.querySelectorAll('[data-move]').forEach(btn=>{
+ const key=btn.dataset.move;
+ const down=e=>{e.preventDefault();held[key]=true;};
+ const up=e=>{e.preventDefault();held[key]=false;};
+ btn.addEventListener('pointerdown',down);btn.addEventListener('pointerup',up);btn.addEventListener('pointerleave',up);btn.addEventListener('pointercancel',up);
+});
+canvas.addEventListener('pointerdown',e=>{if(!started)return;if(e.pointerType==='touch')touchLook={x:e.clientX,y:e.clientY};});
+canvas.addEventListener('pointermove',e=>{
+ if(!started||e.pointerType!=='touch'||!touchLook)return;
+ const dx=e.clientX-touchLook.x,dy=e.clientY-touchLook.y;yaw-=dx*.26;pitch-=dy*.2;pitch=Math.max(-60,Math.min(60,pitch));touchLook={x:e.clientX,y:e.clientY};
+});
+['pointerup','pointercancel','pointerleave'].forEach(n=>canvas.addEventListener(n,()=>{touchLook=null;}));
+app.on('update',dt=>{
+ if(!started)return;
+ const speed=(app.keyboard.isPressed(pc.KEY_SHIFT)?14:7.5)*dt;
+ const forward=(held.forward||app.keyboard.isPressed(pc.KEY_W)||app.keyboard.isPressed(pc.KEY_UP)?1:0)-(held.back||app.keyboard.isPressed(pc.KEY_S)||app.keyboard.isPressed(pc.KEY_DOWN)?1:0);
+ const side=(held.right||app.keyboard.isPressed(pc.KEY_D)||app.keyboard.isPressed(pc.KEY_RIGHT)?1:0)-(held.left||app.keyboard.isPressed(pc.KEY_A)||app.keyboard.isPressed(pc.KEY_LEFT)?1:0);
+ const length=Math.hypot(forward,side)||1;
+ const fx=-Math.sin(yaw*Math.PI/180),fz=-Math.cos(yaw*Math.PI/180),rx=Math.cos(yaw*Math.PI/180),rz=-Math.sin(yaw*Math.PI/180);
+ const pos=cam.getPosition();
+ cam.setPosition(Math.max(-73,Math.min(73,pos.x+(fx*forward+rx*side)/length*speed)),1.8,Math.max(-73,Math.min(73,pos.z+(fz*forward+rz*side)/length*speed)));
+ cam.setEulerAngles(pitch,yaw,0);
+ let nearest='plaza',nearDist=1e9;
+ Object.keys(zoneData).forEach(id=>{const z=zoneData[id],d=Math.hypot(pos.x-z.x,pos.z-z.z);if(d<nearDist){nearDist=d;nearest=id;}});
+ if(nearest!==activeZone&&nearDist<8){selectZone(nearest,false);}
+ if(nearDist<7){nearby.style.display='block';nearby.textContent=zoneData[nearest].icon+'  '+zoneData[nearest].name+' · اضغط E للتعرّف على المكان';}
+ else nearby.style.display='none';
+});
+setInterval(()=>{
+ if(!focusRunning)return;
+ focusSeconds=Math.max(0,focusSeconds-1);const mm=String(Math.floor(focusSeconds/60)).padStart(2,'0'),ss=String(focusSeconds%60).padStart(2,'0');document.getElementById('focus-time').textContent=mm+':'+ss;
+ if(focusSeconds===0){focusRunning=false;tell('أحسنت! انتهت جلسة التركيز. خذ استراحة قصيرة.');}
+},1000);
+app.start();
+note.textContent='المدينة جاهزة. اضغط على زر البداية.';
+})();
+</script>
+</body>
+</html>
